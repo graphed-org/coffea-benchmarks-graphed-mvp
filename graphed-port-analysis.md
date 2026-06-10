@@ -21,14 +21,15 @@ faithful benchmark reimplementation:
 
 ## P0 — genuine blockers
 
-1. **In-graph histogramming for the ragged backend.** Upstream, the histogram IS the analysis
-   output (`hist.Hist...fill(...)` returned per chunk and summed). Our m7 ADL pinned the
-   workaround: materialize values in executor glue, fill with `hist` OUTSIDE the graph, combine
-   numpy count arrays. There is no recorded histogram node — `graphed_numpy` has `np.histogram`
-   dispatch, `graphed_awkward` has nothing. Needed: `gak.histogram(values, bins, start, stop)`
-   (+ 2D/3D variants for the Q2Kin sweeps) as a BOUNDARY REDUCTION (M16 rule: axis=None →
-   tree-reducible monoid; int64 counts; UHI-shaped output, invent no formats). With it, every
-   query is "compile once, one IR, histogram out" — the thing the benchmark actually measures.
+1. **[P0.1 — DONE 2026-06-10, revised per user direction]** Deferred histogramming is NOT a
+   `gak` function: it is its own package, **graphed-histogram** (the dask-histogram analogue —
+   fills record as content-addressed External nodes; backends know nothing about histograms;
+   partition-wise fill through the compiled IR + native `+` tree-combine), plus **`hist.graphed`**
+   in the `hist-graphed-mvp` fork (`Hist`/`NamedHist` with QuickConstruct; `compute()` returns a
+   real `hist.Hist`). The benchmark's `Hist.new.Reg(...).Double().fill(...)` lines port nearly
+   verbatim: construct via `hist.graphed.Hist`, fill with graphed Arrays, `compute()` per query.
+   Root prompt R18 binds the architecture. (graphed M23 seam: `record_external(descriptor=,
+   form=)`; graphed-histogram freeze-M23-0; hist fork freeze-HIST-1.)
 
 2. **The dataset + branch-shape witnesses.** Run2012B_SingleMu.root (16 GB; a 50k-event skim
    exists for CI-scale work). The real file is flat-branch NanoAOD (`nJet`, `Jet_pt`, ...):
