@@ -40,3 +40,14 @@
   on its own platform from the committed skim (coffea installed for that step only); the
   committed JSON remains the macOS snapshot used by the notebook. The process-pool test now
   pins against the sequential run (the sharper claim: the pool changes nothing).
+
+## ADL-1 iteration 2 — q6 coordinate-system fidelity (the second CI finding) — 2026-06-11
+
+- With a SAME-PLATFORM reference, q6 still differed on Linux (and only there): the port summed
+  four-vectors in pt/eta/phi/mass coordinates while upstream deliberately zips CARTESIAN
+  x/y/z/t components first. Different conversion order -> ULP-level differences -> flipped
+  argmin picks between near-equidistant trijet candidates (macOS agreement was luck of the
+  rounding). q6 now mirrors upstream exactly: re-zip {x, y, z, t, btag} (vector-derived — modern
+  coffea's LorentzVector methods ARE vector's) before combining. Lesson for the record:
+  bit-for-bit ports must mirror the reference's COORDINATE SYSTEM and operation order, not just
+  its mathematics.

@@ -112,8 +112,17 @@ def q5(g: Any) -> Any:
 
 
 def q6(g: Any) -> dict[str, Any]:
-    """The trijet closest to the top mass: its pT and its max b-tag."""
-    jet = jets(g, btag=True)
+    """The trijet closest to the top mass: its pT and its max b-tag.
+
+    Mirrors upstream EXACTLY: the jets are re-zipped into CARTESIAN components (x, y, z, t)
+    before summing — summing in pt/eta/phi/mass coordinates rounds differently at the ULP level
+    and flips argmin picks between near-equidistant trijet candidates (a Linux-manifest finding;
+    modern coffea's LorentzVector methods are vector's, so the derived components match)."""
+    p4j = jets(g, btag=True)
+    jet = gak.zip(
+        {"x": p4j.x, "y": p4j.y, "z": p4j.z, "t": p4j.t, "btag": p4j.btag},
+        with_name="Momentum4D",
+    )
     tri = gak.combinations(jet, 3, fields=["j1", "j2", "j3"])
     p4 = tri.j1 + tri.j2 + tri.j3
     best = gak.argmin(abs(p4.mass - 172.5), axis=1, keepdims=True)
