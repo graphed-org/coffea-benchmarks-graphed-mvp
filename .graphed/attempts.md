@@ -65,3 +65,21 @@
 - notebook: ONE ProcessExecutor(max_workers=4, persistent=True) drives every query plot;
   the speedup section times all eight queries sequential vs pool on the skim AND on an 8x
   replicated dataset, with a bar chart — executed outputs: 2.43x (50k) and 2.94x (400k).
+
+## ADL-2 — the P2 benchmark harness — 2026-06-11 (freeze-ADL-2)
+
+- USER: continue with P2; the full 16 GB runs are LOCAL-ONLY (CI runners cannot hold the file).
+- graphed-histogram gained plan(partitions=) (its M23 iteration 4; an assertion-less edit
+  initially pushed the test without the implementation — caught and fixed in 50aea1a; lesson:
+  assert every replace anchor).
+- benchmark.py: entry-target partitioning from uproot metadata entry counts (the sweep varies
+  ABSOLUTE chunk sizes); _BenchFill measures bytes around the PROJECTED branch reads via
+  uproot's file.source.num_requested_bytes (q1 reads 0.73 MB of the 3.7 MB skim — MET only —
+  vs q5's 5.1 MB: the projection is visible in the I/O numbers); one compiled graph per query
+  (q6's two histograms ride one multi-output compile, a single pass); run_benchmark reports the
+  upstream metric set (entries, chunks, bytesread, walltime, us*core/evt, b/evt, MB/s/core).
+- scripts/benchmark_sweep.py mirrors the upstream __main__ grid driver (persistent pools for
+  parallel points; pandas optional with a csv fallback).
+- tests/test_benchmark_harness.py (5, CI-safe on the skim): exact tiling; metric sanity +
+  reference agreement; PROJECTION SHRINKS BYTES (q1 < q7/3); q6 single-pass two-histogram;
+  a parallel point through a persistent pool.
