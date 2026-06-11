@@ -1,9 +1,12 @@
 """ADL-port acceptance (P1): the eight graphed queries against the coffea reference, BIT FOR BIT.
 
 The reference (data/reference_counts.json) is the ORIGINAL coffea processors run over the
-committed 50k skim of Run2012B_SingleMu.root (scripts/make_reference.py). Every bin including
-flow must match exactly: same per-event float operations -> same bin -> identical integer
-counts, independent of partitioning. One query is additionally aggregated through a SPAWNED
+committed 50k skim of Run2012B_SingleMu.root (scripts/make_reference.py). Bit-for-bit is a
+SAME-PLATFORM claim — libm ULP differences across platforms can flip argmin picks between
+near-equidistant trijet candidates (q6) — so CI regenerates the reference on its own platform
+before comparing; the committed JSON is the macOS snapshot. Every bin including flow must match
+exactly: same per-event float operations -> same bin -> identical integer counts, independent
+of partitioning. One query is additionally aggregated through a SPAWNED
 process pool (vector behaviors by import ref) and pinned identical, and recording is pinned
 deterministic (byte-identical serialized IR across two recordings).
 """
@@ -47,16 +50,21 @@ def test_partitioning_does_not_change_any_count():
 
 
 def test_process_pool_aggregation_matches_with_behaviors_by_import_ref():
+    # pinned against the SEQUENTIAL run (same platform by construction): the pool must change
+    # nothing, with vector behaviors reaching workers by import ref
     pytest.importorskip("graphed_exec_local")
     from graphed_exec_local import ProcessExecutor
 
+    sequential = adl.run_query("q6", WHERE, steps_per_file=3)
     sys.path.insert(0, HERE)  # spawn children inherit sys.path; adl_graphed resolves in workers
     try:
-        out = adl.run_query("q6", WHERE, steps_per_file=3, executor=ProcessExecutor(max_workers=2))
+        pooled = adl.run_query("q6", WHERE, steps_per_file=3, executor=ProcessExecutor(max_workers=2))
     finally:
         sys.path.remove(HERE)
-    for label, h in out.items():
-        assert np.array_equal(np.asarray(h.values(flow=True)), np.asarray(REF["q6"][label]))
+    for label, h in pooled.items():
+        assert np.array_equal(
+            np.asarray(h.values(flow=True)), np.asarray(sequential[label].values(flow=True))
+        )
 
 
 def test_recording_is_deterministic():

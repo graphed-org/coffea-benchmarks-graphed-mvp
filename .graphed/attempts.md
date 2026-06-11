@@ -31,3 +31,12 @@
   comparison is flow-inclusive bin-by-bin. Also: installing coffea replaced the editable uproot
   fork with PyPI uproot (restored with --no-deps; coffea is NOT a CI dependency — the reference
   is committed JSON).
+
+## ADL-1 iteration 1 — same-platform reference (CI q6 finding) — 2026-06-11
+
+- CI (Linux) failed ONLY q6 vs the macOS-generated reference: libm ULP differences flip
+  argmin's pick between near-equidistant trijet candidates -> a different candidate's pt ->
+  a different bin. Bit-for-bit is a SAME-PLATFORM claim: CI now generates the coffea reference
+  on its own platform from the committed skim (coffea installed for that step only); the
+  committed JSON remains the macOS snapshot used by the notebook. The process-pool test now
+  pins against the sequential run (the sharper claim: the pool changes nothing).

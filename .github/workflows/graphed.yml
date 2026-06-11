@@ -43,6 +43,11 @@ jobs:
           python -m pip install "${{ env.CORE }}" "${{ env.DEBUG }}" "${{ env.FRONTEND }}" \
             "${{ env.NUMPY }}" "${{ env.AWKWARD }}" "${{ env.EXEC }}" "${{ env.HISTO }}" \
             "${{ env.UPROOT }}" "${{ env.HIST }}"
-          python -m pip install pytest vector
-      - name: ADL acceptance vs the committed coffea reference
+          python -m pip install pytest vector coffea
+      - name: Generate the coffea reference ON THIS PLATFORM
+        # libm ULP differences across platforms can flip argmin picks between near-equidistant
+        # trijet candidates (q6): bit-for-bit is a SAME-PLATFORM claim, so the reference is
+        # produced here from the committed skim (no network; coffea only needed for this step)
+        run: python scripts/make_reference.py
+      - name: ADL acceptance vs the coffea reference
         run: python -m pytest tests -q
