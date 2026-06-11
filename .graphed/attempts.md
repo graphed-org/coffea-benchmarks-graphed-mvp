@@ -144,3 +144,19 @@
   renamed copy), reruns the OPTIMIZED fill-terminal graph through the 4-worker pool, and
   verifies the output against reproduce() bit for bit — executed output:
   "re-targeted + parallel rerun == reproduce(bundle), bit for bit: True".
+
+## ADL-4 — the graphed-debug demonstration — 2026-06-11
+
+- USER: a section before checkpointing demonstrating graphed-debug clearly — ProcessExecutor,
+  faulty code regions, and the nature of caught errors.
+- debugging.py: faulty_q4 carries a DATA-DEPENDENT off-by-one unflatten-counts bug (records
+  cleanly — the typetracer cannot see it; trips only on real data); run_faulty_chunk records +
+  gd.run's the analysis IN THE WORKER (the m7 pattern); faulty_plan over real skim partitions.
+- tests/test_debugging.py (2): a record-time typo carries THIS test file's line
+  (GraphedTypeError); the worker StageError crosses the spawned-pool boundary INTACT — op
+  ak.unflatten, cause ValueError, the failing partition named, user frames in debugging.py,
+  user_frame.filename at the buggy line, format_traceback arrowed. (Authoring fix: user_frame
+  is a SourceFrame object, not a string.)
+- notebook: the new section's executed outputs show the typo caught at the user's line with no
+  data read, the driver-side gd.run traceback, and the pool failure re-raised in the driver
+  with op/cause/partition(@16384:32768)/your-code(debugging.py:29) + the arrowed traceback.
