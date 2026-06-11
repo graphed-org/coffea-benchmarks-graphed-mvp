@@ -51,3 +51,39 @@ def test_worker_stage_errors_cross_the_process_boundary_intact():
     rendered = gd.format_traceback(err)
     assert "-->" in rendered and "debugging.py" in rendered  # the arrowed faulty line
     assert "ak.unflatten" in rendered and "ValueError" in rendered
+
+
+def test_the_user_traceback_survives_higher_optimization_levels():
+    """opt_level=0 executes 1:1; opt_level>=1 fuses maximal op runs into stages — the buggy op
+    is BURIED inside a multi-member fused stage, yet the StageError lands on the SAME user line:
+    every fused member keeps its own SourceFrame through lowering."""
+    import awkward as ak
+    import uproot
+    from graphed import Session
+    from graphed_awkward import AwkwardBackend, from_awkward
+
+    raw = uproot.open(WHERE[0]).arrays(["Jet_pt"], entry_stop=1000)
+    s = Session(AwkwardBackend())
+    g = from_awkward(s, "events", ak.Array({"Jet_pt": raw.Jet_pt}))
+    bad = debugging.faulty_q4(g)
+
+    lowered0 = gd.lower(s, bad, opt_level=0)
+    lowered1 = gd.lower(s, bad, opt_level=1)
+    assert lowered0.one_to_one and all(len(st.members) == 1 for st in lowered0.stages)
+    fused = next(st for st in lowered1.stages if any(m.op == "ak.unflatten" for m in st.members))
+    assert len(fused.members) > 1  # the buggy op rides INSIDE a fused stage at opt_level=1
+    member = next(m for m in fused.members if m.op == "ak.unflatten")
+    assert member.provenance.filename.endswith("debugging.py")  # provenance per fused MEMBER
+
+    errors = {}
+    for lvl in (0, 1):
+        with pytest.raises(gd.StageError) as exc:
+            gd.run(s, bad, opt_level=lvl, partition=f"lvl{lvl}")
+        errors[lvl] = exc.value
+    assert errors[0].opt_level == 0 and errors[1].opt_level == 1
+    for err in errors.values():
+        assert err.op == "ak.unflatten"
+        assert err.user_frame.filename.endswith("debugging.py")
+    # the SAME user line at both levels — optimization never costs the traceback
+    assert errors[0].user_frame.lineno == errors[1].user_frame.lineno
+    assert errors[0].user_frame.lineno == member.provenance.lineno

@@ -160,3 +160,13 @@
 - notebook: the new section's executed outputs show the typo caught at the user's line with no
   data read, the driver-side gd.run traceback, and the pool failure re-raised in the driver
   with op/cause/partition(@16384:32768)/your-code(debugging.py:29) + the arrowed traceback.
+
+## ADL-4 iteration 1 — the traceback survives higher optimization levels — 2026-06-11
+
+- USER: demonstrate traceback preservation through higher-order optimizations.
+- Notebook cells + a pin test: gd.lower at opt_level=0 (7 stages, all single-member, 1:1) vs
+  opt_level=1 (4 stages, members [1,1,4,1]) — the buggy ak.unflatten rides INSIDE a 4-member
+  fused stage whose members EACH keep their own SourceFrame (flatten:27, num:28, add:28,
+  unflatten:29 <- the bug); gd.run at BOTH levels raises StageError at the SAME debugging.py:29
+  (pinned: same op, same line, err.opt_level distinguishes; the fused member's provenance
+  equals the StageError's user_frame). Fusion never costs the traceback.
