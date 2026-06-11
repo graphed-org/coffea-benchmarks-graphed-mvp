@@ -131,3 +131,16 @@
   (flow-inclusive); totals equal the acceptance reference's flow-inclusive sum.
 - notebook: inspect() now shows the histogram payload line; the optimized-graph table includes
   the external terminal; markdown tells the payload story; executed (61 -> 13 nodes).
+
+## ADL-3 iteration 3 — the lost re-target demo restored (user catch) — 2026-06-11
+
+- The histogram-as-payload notebook update CLOBBERED the re-target-on-a-new-file cell: the old
+  rerun cell's PRINT STRING contained both "reproduce(bundle)" and "stairs", so an ambiguous
+  content-matcher overwrote it with the reproduce-plot source before the rerun matcher ran —
+  the doubled "build-time reference" output in the execution log was the tell, missed.
+  LESSON: notebook cell matchers must key on UNIQUE anchors (e.g. the call expression), and
+  doubled outputs in an execution log are a red flag, not noise.
+- Restored: the cell under "not tied to its original dataset" now redirects the input (a
+  renamed copy), reruns the OPTIMIZED fill-terminal graph through the 4-worker pool, and
+  verifies the output against reproduce() bit for bit — executed output:
+  "re-targeted + parallel rerun == reproduce(bundle), bit for bit: True".
