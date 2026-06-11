@@ -181,3 +181,12 @@
   5.2-5.8x@8 for I/O+compute queries; q6 (trijet combinatorics) is memory-bandwidth-bound and
   REGRESSES at 8 workers (167 s vs 113 s at 4) — recorded honestly; the chunksize axis is the
   lever (per-query chunk policy = Phase-2 harness refinement).
+
+## ADL-4 iteration 2 — editorial pass (user catch) — 2026-06-11
+
+- USER: development-narration asides ("a Linux-manifest finding...", milestone references,
+  "m7-proven") confuse human readers of the demonstrator. Swept the notebook INCLUDING the
+  displayed query docstrings (inspect.getsource makes adl_graphed docstrings notebook content):
+  q6's docstring now states the cartesian-zip requirement plainly; the module docstring and the
+  preservation markdown lose their internal-history parentheticals. The engineering rationale
+  remains in this attempts log and the git history, where it belongs.

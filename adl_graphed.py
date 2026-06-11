@@ -6,9 +6,7 @@ kinematics; every query ends in a deferred ``hist.graphed`` fill whose plan any 
 aggregates. Vector behaviors reach process workers by IMPORT REF (``adl_graphed:make_backend``)
 — never by pickling the behavior dict.
 
-Δ-quantities are property-safe formulas (behavior METHODS with arguments, e.g. vector's
-``a.deltaR(b)``, are not yet recordable through the proxy — a known Phase-2 item; the explicit
-formulas below are the m7-proven equivalents).
+Δ-quantities (delta_phi, delta_r) are written as explicit formulas.
 """
 
 from __future__ import annotations
@@ -114,10 +112,8 @@ def q5(g: Any) -> Any:
 def q6(g: Any) -> dict[str, Any]:
     """The trijet closest to the top mass: its pT and its max b-tag.
 
-    Mirrors upstream EXACTLY: the jets are re-zipped into CARTESIAN components (x, y, z, t)
-    before summing — summing in pt/eta/phi/mass coordinates rounds differently at the ULP level
-    and flips argmin picks between near-equidistant trijet candidates (a Linux-manifest finding;
-    modern coffea's LorentzVector methods are vector's, so the derived components match)."""
+    Jets are re-zipped into cartesian components (x, y, z, t) before summing, matching the
+    reference implementation's four-vector arithmetic exactly."""
     p4j = jets(g, btag=True)
     jet = gak.zip(
         {"x": p4j.x, "y": p4j.y, "z": p4j.z, "t": p4j.t, "btag": p4j.btag},
