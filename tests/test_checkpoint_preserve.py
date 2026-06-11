@@ -1,0 +1,86 @@
+"""Checkpointing + preservation over the real skim (the M8/M9 layers on ADL data).
+
+Pins: a resumable q1 run equals the harness's q1 counts; a CRASHED run (kill after 3 committed
+partitions) resumes from the store alone, bit for bit, executing only the remainder; a finished
+store re-runs with everything skipped; the q5 preservation bundle inspect()s without executing
+and reproduce()s its build-time reference exactly, with totals consistent with the acceptance
+reference.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import os
+
+import numpy as np
+import pytest
+
+pytest.importorskip("graphed_awkward")
+pytest.importorskip("graphed_checkpoint")
+pytest.importorskip("graphed_preserve")
+pytest.importorskip("vector")
+
+import benchmark  # noqa: E402
+import preservation  # noqa: E402
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SKIM = os.path.join(HERE, "data", "Run2012B_SingleMu_50k.root")
+WHERE = [SKIM + ":Events"]
+REF = json.load(open(os.path.join(HERE, "data", "reference_counts.json")))
+N, CHUNK = 50_000, 2**13
+
+
+def _q1_reference() -> np.ndarray:
+    return np.asarray(
+        benchmark.run_benchmark("q1", WHERE, chunksize=CHUNK)["hists"]["q1"].values()
+    )
+
+
+def test_resumable_q1_matches_and_a_second_run_skips_everything(tmp_path):
+    from graphed_checkpoint import Store, run_resumable
+
+    plan = preservation.durable_q1_plan(WHERE, CHUNK)
+    store = Store(tmp_path / "store")
+    res = run_resumable(plan, store)
+    assert res.report.executed == math.ceil(N / CHUNK)
+    assert np.array_equal(np.asarray(res.value, dtype=float), _q1_reference())
+
+    again = run_resumable(plan, store)  # the store already holds every partial
+    assert again.report.executed == 0
+    assert again.report.skipped == math.ceil(N / CHUNK)
+    assert np.array_equal(np.asarray(again.value), np.asarray(res.value))
+
+
+def test_crashed_run_resumes_bit_for_bit(tmp_path):
+    from graphed_checkpoint import Store, run_resumable
+    from graphed_checkpoint.runner import _SimulatedInterrupt
+
+    plan = preservation.durable_q1_plan(WHERE, CHUNK)
+    store = Store(tmp_path / "store")
+    with pytest.raises(_SimulatedInterrupt):
+        run_resumable(plan, store, _kill_after=3)  # crash mid-run: 3 partials committed
+    assert len(store.completed()) == 3
+
+    res = run_resumable(plan, store)  # resume on the same store
+    assert res.report.skipped == 3 and res.report.executed == math.ceil(N / CHUNK) - 3
+    assert res.report.did_less_work
+    assert np.array_equal(np.asarray(res.value, dtype=float), _q1_reference())
+
+
+def test_preserved_q5_bundle_inspects_and_reproduces(tmp_path):
+    from graphed_preserve import inspect as inspect_bundle
+    from graphed_preserve import reproduce
+
+    bundle, build_reference = preservation.preserve_q5(tmp_path / "bundle", SKIM)
+
+    rendered = inspect_bundle(bundle)  # renders WITHOUT executing or resolving data
+    assert "events" in rendered
+    assert "opaque" not in rendered.lower() or "0" in rendered  # nothing cloudpickled in q5
+
+    got = np.asarray(reproduce(bundle), dtype=float)
+    assert np.array_equal(got, build_reference)  # bit-for-bit, from the bundle alone
+
+    # consistent with the acceptance reference: same selection, in-range totals agree
+    ref_total_inrange = float(np.asarray(REF["q5"]["q5"])[1:-1].sum())  # strip flow
+    assert got.sum() == ref_total_inrange

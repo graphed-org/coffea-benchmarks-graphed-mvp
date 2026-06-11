@@ -83,3 +83,19 @@
 - tests/test_benchmark_harness.py (5, CI-safe on the skim): exact tiling; metric sanity +
   reference agreement; PROJECTION SHRINKS BYTES (q1 < q7/3); q6 single-pass two-histogram;
   a parallel point through a persistent pool.
+
+## ADL-3 — checkpointing + preservation on real benchmark data — 2026-06-11
+
+- USER: demonstrate checkpointing and analysis preservation in the notebook, with tests.
+- preservation.py: q1 as a DurablePlan (the COMPILED query IR is the plan identity; import-ref
+  process/combine/empty; entry-target partitions; reads real MET_pt slices from the ROOT skim);
+  q5 preserved via build_bundle over an in-memory events record read once from the skim —
+  recorded with EXPLICIT kinematic formulas (the M9 interpreter evaluates through a bare
+  backend; behavior properties are not preserved — documented improvement candidate).
+- tests/test_checkpoint_preserve.py (3): resumable q1 == the harness counts with a finished
+  store re-running all-skipped; a CRASHED run (_kill_after=3) resumes from the store alone BIT
+  FOR BIT executing only the remainder; the q5 bundle inspect()s without executing and
+  reproduce()s its build-time reference exactly, with in-range totals equal to the acceptance
+  reference's (flow stripped).
+- notebook: new sections with executed outputs (crash -> 3 partials survive -> resume executes
+  4/skips 3 -> re-run skips 7; reproduce bit-for-bit True + the reproduced q5 plot).
