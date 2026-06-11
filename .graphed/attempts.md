@@ -99,3 +99,19 @@
   reference's (flow stripped).
 - notebook: new sections with executed outputs (crash -> 3 partials survive -> resume executes
   4/skips 3 -> re-run skips 7; reproduce bit-for-bit True + the reproduced q5 plot).
+
+## ADL-3 iteration 1 — preserved analyses: optimize -> re-target -> parallelize — 2026-06-11
+
+- USER: show the reproduced workflow through a ProcessExecutor on a DIFFERENT input dataset,
+  demonstrating clearly that an OPTIMIZED graph runs in the reproduced case.
+- preservation.optimized_ir(bundle): the bundle deliberately preserves opt_level=0 (auditable,
+  1:1, NO stages — pinned); the re-run REDUCES it (the preserved output marks ride in the
+  bytes). On q5: 61 preserved nodes -> 13 executed (source + stages; one stage fuses 39 user
+  ops) — printed as a node table in the notebook. rerun_preserved(bundle, files, executor=)
+  evaluates the REDUCED IR per entry-target partition of the new file through any R7 executor.
+- Also: preserve_q5's build-time reference dropped a latent np.round(...,6) that did not match
+  reproduce()'s raw-float fill (agreement had been luck of the rounding).
+- test (4th): no stages preserved / stages after reduction / >2x node collapse / members > 0;
+  a copy of the skim under a new name through ProcessExecutor(2) equals reproduce() bit for bit.
+- notebook: the optimized-graph node table + the re-target-through-the-pool cells, executed
+  (61 -> 13 nodes; equality True; the reproduced-on-new-input plot).

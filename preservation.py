@@ -124,10 +124,8 @@ def preserve_q5(root: Any, skim_path: str) -> tuple[Any, np.ndarray]:
 
     events = load_events(skim_path)
     session, value, weight = record_q5(events)
-    vals = np.asarray(ak.Array(session.materialize(value)))
-    reference = np.histogram(
-        np.round(vals, 6), bins=Q5_HIST["bins"], range=(Q5_HIST["lo"], Q5_HIST["hi"])
-    )[0]
+    vals = np.asarray(ak.Array(session.materialize(value)), dtype="float64")
+    reference = np.histogram(vals, bins=Q5_HIST["bins"], range=(Q5_HIST["lo"], Q5_HIST["hi"]))[0]
     bundle = build_bundle(
         root,
         session=session,
@@ -138,3 +136,110 @@ def preserve_q5(root: Any, skim_path: str) -> tuple[Any, np.ndarray]:
         histogram=Q5_HIST,
     )
     return bundle, reference.astype(np.float64)
+
+
+# ---- re-running the PRESERVED analysis: optimize, re-target, parallelize --------------------------
+def optimized_ir(bundle: Any) -> tuple[bytes, dict[str, Any]]:
+    """The bundle's IR, REDUCED for execution. The bundle deliberately preserves opt_level=0
+    (auditable, 1:1 with the user's ops, no stage fusion); a re-run reduces it first — DCE + CSE +
+    equality-saturation stage fusion — and the returned stats make the collapse visible."""
+    from graphed_core import GraphStore
+
+    raw = bundle.store.get(bundle.manifest["analysis"]["ir"])
+    assert raw is not None, "bundle IR missing from its store"
+    g = GraphStore.deserialize(raw)
+    reduced, report = g.reduce()  # the preserved output marks ride in the bytes
+    preserved_kinds = sorted({n["kind"] for n in g.nodes()})
+    stats = {
+        "preserved_nodes": g.node_count(),
+        "preserved_kinds": preserved_kinds,
+        "reduced_nodes": reduced.node_count(),
+        "reduced_kinds": sorted({n["kind"] for n in reduced.nodes()}),
+        "stage_members": [n.get("n_members", 0) for n in reduced.nodes() if n["kind"] == "stage"],
+        "report": report,
+    }
+    return bytes(reduced.serialize()), stats
+
+
+def _events_slice(partition: Any) -> Any:
+    """Read ONE partition's q5 inputs from a ROOT file into the preserved record shape."""
+    import awkward as ak
+
+    raw = uproot.open(f"{partition.uri}:{partition.tree}").arrays(
+        ["Muon_pt", "Muon_eta", "Muon_phi", "Muon_mass", "Muon_charge", "MET_pt"],
+        entry_start=partition.entry_start,
+        entry_stop=partition.entry_stop,
+    )
+    return ak.Array(
+        {
+            "Muon": ak.zip(
+                {
+                    "pt": raw.Muon_pt,
+                    "eta": raw.Muon_eta,
+                    "phi": raw.Muon_phi,
+                    "mass": raw.Muon_mass,
+                    "charge": raw.Muon_charge,
+                }
+            ),
+            "MET_pt": raw.MET_pt,
+        }
+    )
+
+
+from dataclasses import dataclass as _dataclass  # noqa: E402
+
+
+@_dataclass(frozen=True)
+class _RetargetFill:
+    """Worker task (picklable): evaluate the REDUCED preserved IR over one partition of a NEW
+    input file and histogram value*weight per the bundle's spec."""
+
+    ir: bytes
+    bins: int
+    lo: float
+    hi: float
+
+    def __call__(self, partition: Any, resources: Any) -> np.ndarray:
+        import awkward as ak
+        from graphed import evaluate_ir
+        from graphed_awkward import AwkwardBackend
+
+        chunk = _events_slice(partition)
+        value, weight = evaluate_ir(self.ir, AwkwardBackend(), {"events": chunk})
+        v = np.asarray(ak.to_numpy(ak.Array(value)), dtype="float64")
+        w = np.asarray(ak.to_numpy(ak.Array(weight)), dtype="float64")
+        return np.histogram(v, bins=self.bins, range=(self.lo, self.hi), weights=w)[0]
+
+
+def _f8_add(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    return a + b
+
+
+@_dataclass(frozen=True)
+class _F8Zeros:
+    bins: int
+
+    def __call__(self) -> np.ndarray:
+        return np.zeros(self.bins, dtype="float64")
+
+
+def rerun_preserved(
+    bundle: Any, files: list[str], *, executor: Any = None, chunksize: int = 2**13
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Re-target the preserved analysis at NEW input files and run its OPTIMIZED graph partition
+    by partition through any R7 executor. Returns (counts, optimization stats)."""
+    from graphed.write import SequentialRunner
+    from graphed_core.execution import Plan, Task
+
+    import benchmark
+
+    ir, stats = optimized_ir(bundle)
+    spec = bundle.manifest["analysis"]["histogram"]
+    process = _RetargetFill(ir=ir, bins=int(spec["bins"]), lo=float(spec["lo"]), hi=float(spec["hi"]))
+    parts = benchmark.entry_target_partitions(files, chunksize)
+    plan = Plan(
+        process=process, combine=_f8_add, empty=_F8Zeros(int(spec["bins"])),
+        tasks=tuple(Task(i, p) for i, p in enumerate(parts)),
+    )
+    runner = executor if executor is not None else SequentialRunner()
+    return np.asarray(runner.run(plan).value, dtype="float64"), stats

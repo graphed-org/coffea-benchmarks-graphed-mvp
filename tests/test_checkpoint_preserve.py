@@ -84,3 +84,28 @@ def test_preserved_q5_bundle_inspects_and_reproduces(tmp_path):
     # consistent with the acceptance reference: same selection, in-range totals agree
     ref_total_inrange = float(np.asarray(REF["q5"]["q5"])[1:-1].sum())  # strip flow
     assert got.sum() == ref_total_inrange
+
+
+def test_rerun_of_the_preserved_analysis_optimizes_retargets_and_parallelizes(tmp_path):
+    import shutil
+
+    pytest.importorskip("graphed_exec_local")
+    from graphed_exec_local import ProcessExecutor
+    from graphed_preserve import reproduce
+
+    bundle, _build_ref = preservation.preserve_q5(tmp_path / "bundle", SKIM)
+
+    # the bundle preserves opt_level=0 (auditable, NO stages); the re-run REDUCES it first
+    _ir, stats = preservation.optimized_ir(bundle)
+    assert "stage" not in stats["preserved_kinds"]  # 1:1 with the user's ops as preserved
+    assert "stage" in stats["reduced_kinds"]  # fused for execution
+    assert stats["reduced_nodes"] < stats["preserved_nodes"] / 2  # the collapse is real
+    assert sum(stats["stage_members"]) > 0  # the user's ops live INSIDE the stages
+
+    # re-target at a DIFFERENT input dataset (a copy under a new name) through a process pool
+    retarget = tmp_path / "Run2012B_SingleMu_50k_retarget.root"
+    shutil.copy(SKIM, retarget)
+    counts, _ = preservation.rerun_preserved(
+        bundle, [str(retarget) + ":Events"], executor=ProcessExecutor(max_workers=2)
+    )
+    assert np.array_equal(counts, np.asarray(reproduce(bundle), dtype="float64"))
