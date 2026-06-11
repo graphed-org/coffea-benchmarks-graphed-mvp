@@ -21,6 +21,8 @@ env:
   HISTO: "graphed-histogram @ git+https://github.com/graphed-org/graphed-histogram-mvp@main"
   UPROOT: "uproot @ git+https://github.com/graphed-org/uproot5-graphed-mvp@graphed-mvp"
   HIST: "hist @ git+https://github.com/graphed-org/hist-graphed-mvp@graphed-mvp"
+  CHECKPOINT: "graphed-checkpoint @ git+https://github.com/graphed-org/graphed-checkpoint-mvp@main"
+  PRESERVE: "graphed-preserve @ git+https://github.com/graphed-org/graphed-preserve-mvp@main"
 
 jobs:
   tests:
@@ -42,7 +44,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "${{ env.CORE }}" "${{ env.DEBUG }}" "${{ env.FRONTEND }}" \
             "${{ env.NUMPY }}" "${{ env.AWKWARD }}" "${{ env.EXEC }}" "${{ env.HISTO }}" \
-            "${{ env.UPROOT }}" "${{ env.HIST }}"
+            "${{ env.UPROOT }}" "${{ env.HIST }}" "${{ env.CHECKPOINT }}" "${{ env.PRESERVE }}"
           python -m pip install pytest vector coffea
           # coffea's resolver pulls PyPI uproot OVER the fork (the same trap hit locally):
           # the fork must win, and it satisfies coffea (uproot 5.x + the graphed additions)
