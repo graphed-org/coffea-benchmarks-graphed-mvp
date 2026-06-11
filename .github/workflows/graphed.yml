@@ -44,6 +44,9 @@ jobs:
             "${{ env.NUMPY }}" "${{ env.AWKWARD }}" "${{ env.EXEC }}" "${{ env.HISTO }}" \
             "${{ env.UPROOT }}" "${{ env.HIST }}"
           python -m pip install pytest vector coffea
+          # coffea's resolver pulls PyPI uproot OVER the fork (the same trap hit locally):
+          # the fork must win, and it satisfies coffea (uproot 5.x + the graphed additions)
+          python -m pip install --force-reinstall --no-deps "${{ env.UPROOT }}"
       - name: Generate the coffea reference ON THIS PLATFORM
         # libm ULP differences across platforms can flip argmin picks between near-equidistant
         # trijet candidates (q6): bit-for-bit is a SAME-PLATFORM claim, so the reference is
