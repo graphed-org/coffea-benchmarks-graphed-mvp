@@ -42,6 +42,20 @@ def test_query_matches_the_coffea_reference_bit_for_bit(qname):
         assert np.array_equal(got, want), f"{qname}/{label}: counts differ from the coffea reference"
 
 
+@pytest.mark.parametrize("qname", sorted(adl.QUERIES))
+def test_query_parallel_matches_the_reference_approximately(qname):
+    """Every query through a SPAWNED process pool (>=2 workers). Exactness is the SEQUENTIAL
+    tier's claim; here rounding-level agreement suffices (combine-tree float effects allowed)."""
+    pytest.importorskip("graphed_exec_local")
+    from graphed_exec_local import ProcessExecutor
+
+    out = adl.run_query(qname, WHERE, steps_per_file=8, executor=ProcessExecutor(max_workers=2))
+    for label, h in out.items():
+        got = np.asarray(h.values(flow=True))
+        want = np.asarray(REF[qname][label])
+        assert np.allclose(got, want), f"{qname}/{label}: parallel counts diverge beyond rounding"
+
+
 def test_partitioning_does_not_change_any_count():
     # integer counts are exact under ANY partitioning: per-event work is identical
     a = adl.run_query("q5", WHERE, steps_per_file=1)["q5"]

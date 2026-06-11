@@ -51,3 +51,17 @@
   coffea's LorentzVector methods ARE vector's) before combining. Lesson for the record:
   bit-for-bit ports must mirror the reference's COORDINATE SYSTEM and operation order, not just
   its mathematics.
+
+## ADL-1 iteration 3 — the parallel tier + the speedup demo — 2026-06-11
+
+- USER: parallel processing with ProcessExecutor everywhere; approximate agreement acceptable
+  for parallel (the exact bit-for-bit pins stay on the SequentialRunner tier); the notebook's
+  primary plots from a >=2-core ProcessExecutor, showing the speedup.
+- tests: every query through ProcessExecutor(max_workers=2) with np.allclose vs the reference
+  (8 new tests; 20 total green).
+- FINDING en route: a fresh import-heavy pool per run() made the eight queries 3x SLOWER
+  parallel than sequential on the 50k skim — fixed upstream in graphed-exec-local with the
+  opt-in persistent=True pool (frozen-tested there; 0f4d44a/7c2286b).
+- notebook: ONE ProcessExecutor(max_workers=4, persistent=True) drives every query plot;
+  the speedup section times all eight queries sequential vs pool on the skim AND on an 8x
+  replicated dataset, with a bar chart — executed outputs: 2.43x (50k) and 2.94x (400k).
