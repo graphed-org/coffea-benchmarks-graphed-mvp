@@ -8,10 +8,13 @@ Two durability layers, demonstrated on the committed skim:
   with everything skipped. All callables here are MODULE-LEVEL so a plan resolves them by import
   path on a machine with no analysis source files.
 - **Preservation** (graphed-preserve): the q5 analysis captured as a self-contained
-  content-addressed bundle (IR + datasets + histogram spec), ``inspect()``-able without
-  executing and ``reproduce()``-able bit for bit. The preserved recording uses EXPLICIT
-  kinematic formulas (the M9 interpreter evaluates through a bare awkward backend — vector
-  behavior properties are not preserved; a documented improvement candidate).
+  content-addressed bundle whose preserved IR ENDS AT THE HISTOGRAM FILL — the fill is an
+  External node and its canonical axes/storage spec IS its content-addressed payload
+  (synthesized at build time from the node's own params; graphed-preserve M25). ``inspect()``
+  renders it without executing; ``reproduce()`` returns the histogram itself, bit for bit.
+  The preserved recording uses EXPLICIT kinematic formulas (the M9 interpreter evaluates
+  through a bare awkward backend — vector behavior properties are not preserved; a documented
+  improvement candidate).
 """
 
 from __future__ import annotations
@@ -100,8 +103,11 @@ def load_events(skim_path: str) -> Any:
     )
 
 
-def record_q5(events: Any) -> tuple[Any, Any, Any]:
-    """Record q5 (formula-based) over an in-memory events record: (session, value, weight)."""
+def record_q5(events: Any) -> tuple[Any, Any]:
+    """Record q5 (formula-based) over an in-memory events record, ENDING AT a histogram fill:
+    (session, fill_node). The fill is the analysis terminal — no value/weight/spec triple."""
+    import boost_histogram as bh
+    import graphed_histogram as gh
     from graphed import Session
     from graphed_awkward import AwkwardBackend, from_awkward, gak
 
@@ -112,30 +118,24 @@ def record_q5(events: Any) -> tuple[Any, Any, Any]:
     mass = _pair_mass(pair.mu1, pair.mu2)
     opposite = pair.mu1.charge != pair.mu2.charge
     good = gak.any((mass > 60.0) & (mass < 120.0) & opposite, axis=1)
-    value = g.MET_pt[good]
-    weight = gak.ones_like(value, dtype="float64")
-    return s, value, weight
+    h = gh.boost.Histogram(
+        bh.axis.Regular(Q5_HIST["bins"], Q5_HIST["lo"], Q5_HIST["hi"]), storage=bh.storage.Double()
+    )
+    h.fill(g.MET_pt[good])
+    return s, h.fill_nodes()[0]
 
 
-def preserve_q5(root: Any, skim_path: str) -> tuple[Any, np.ndarray]:
-    """Build the q5 preservation bundle under ``root``; returns (bundle, build-time reference)."""
-    import awkward as ak
+def preserve_q5(root: Any, skim_path: str) -> tuple[Any, Any]:
+    """Build the q5 preservation bundle under ``root``; returns (bundle, build-time reference
+    histogram). The HISTOGRAM IS PART OF THE PAYLOAD: the fill node's canonical spec is its
+    content-addressed payload, synthesized at build — payloads={} and no histogram= spec."""
     from graphed_preserve import build_bundle
 
     events = load_events(skim_path)
-    session, value, weight = record_q5(events)
-    vals = np.asarray(ak.Array(session.materialize(value)), dtype="float64")
-    reference = np.histogram(vals, bins=Q5_HIST["bins"], range=(Q5_HIST["lo"], Q5_HIST["hi"]))[0]
-    bundle = build_bundle(
-        root,
-        session=session,
-        value=value,
-        weight=weight,
-        datasets={"events": events},
-        payloads={},
-        histogram=Q5_HIST,
-    )
-    return bundle, reference.astype(np.float64)
+    session, fill = record_q5(events)
+    reference = session.materialize(fill)  # the eager twin: a filled boost histogram
+    bundle = build_bundle(root, session=session, value=fill, datasets={"events": events}, payloads={})
+    return bundle, reference
 
 
 # ---- re-running the PRESERVED analysis: optimize, re-target, parallelize --------------------------
@@ -191,55 +191,63 @@ from dataclasses import dataclass as _dataclass  # noqa: E402
 
 @_dataclass(frozen=True)
 class _RetargetFill:
-    """Worker task (picklable): evaluate the REDUCED preserved IR over one partition of a NEW
-    input file and histogram value*weight per the bundle's spec."""
+    """Worker task (picklable): evaluate the REDUCED preserved IR — which ENDS AT the histogram
+    fill — over one partition of a NEW input file. Each chunk yields a filled histogram."""
 
     ir: bytes
-    bins: int
-    lo: float
-    hi: float
+    spec: str
 
-    def __call__(self, partition: Any, resources: Any) -> np.ndarray:
-        import awkward as ak
+    def __call__(self, partition: Any, resources: Any) -> Any:
         from graphed import evaluate_ir
-        from graphed_awkward import AwkwardBackend
+        from graphed_histogram.boost import FillEvaluator
 
         chunk = _events_slice(partition)
-        value, weight = evaluate_ir(self.ir, AwkwardBackend(), {"events": chunk})
-        v = np.asarray(ak.to_numpy(ak.Array(value)), dtype="float64")
-        w = np.asarray(ak.to_numpy(ak.Array(weight)), dtype="float64")
-        return np.histogram(v, bins=self.bins, range=(self.lo, self.hi), weights=w)[0]
+        chash = __import__("graphed_histogram").content_hash(self.spec)
+        evaluator = FillEvaluator(spec=self.spec, n_axes=1, has_weight=False, has_sample=False)
+        (filled,) = evaluate_ir(
+            self.ir, _bare_backend(), {"events": chunk}, externals={chash: evaluator}
+        )
+        return filled
 
 
-def _f8_add(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return a + b
+def _bare_backend() -> Any:
+    from graphed_awkward import AwkwardBackend
+
+    return AwkwardBackend()
 
 
 @_dataclass(frozen=True)
-class _F8Zeros:
-    bins: int
+class _ZeroOf:
+    spec: str
 
-    def __call__(self) -> np.ndarray:
-        return np.zeros(self.bins, dtype="float64")
+    def __call__(self) -> Any:
+        import graphed_histogram as gh
+
+        return gh.zero_of(self.spec)
+
+
+def _hist_sum(a: Any, b: Any) -> Any:
+    return a + b
 
 
 def rerun_preserved(
     bundle: Any, files: list[str], *, executor: Any = None, chunksize: int = 2**13
-) -> tuple[np.ndarray, dict[str, Any]]:
+) -> tuple[Any, dict[str, Any]]:
     """Re-target the preserved analysis at NEW input files and run its OPTIMIZED graph partition
-    by partition through any R7 executor. Returns (counts, optimization stats)."""
+    by partition through any R7 executor. Returns (the aggregated histogram, optimization stats)."""
     from graphed.write import SequentialRunner
     from graphed_core.execution import Plan, Task
 
     import benchmark
 
     ir, stats = optimized_ir(bundle)
-    spec = bundle.manifest["analysis"]["histogram"]
-    process = _RetargetFill(ir=ir, bins=int(spec["bins"]), lo=float(spec["lo"]), hi=float(spec["hi"]))
+    entry = next(e for e in bundle.manifest["externals"] if e["kind"] == "histogram")
+    spec = bundle.store.get(entry["store"]).decode()  # the preserved PAYLOAD: the canonical spec
+    process = _RetargetFill(ir=ir, spec=spec)
     parts = benchmark.entry_target_partitions(files, chunksize)
     plan = Plan(
-        process=process, combine=_f8_add, empty=_F8Zeros(int(spec["bins"])),
+        process=process, combine=_hist_sum, empty=_ZeroOf(spec),
         tasks=tuple(Task(i, p) for i, p in enumerate(parts)),
     )
     runner = executor if executor is not None else SequentialRunner()
-    return np.asarray(runner.run(plan).value, dtype="float64"), stats
+    return runner.run(plan).value, stats

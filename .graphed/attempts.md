@@ -115,3 +115,19 @@
   a copy of the skim under a new name through ProcessExecutor(2) equals reproduce() bit for bit.
 - notebook: the optimized-graph node table + the re-target-through-the-pool cells, executed
   (61 -> 13 nodes; equality True; the reproduced-on-new-input plot).
+
+## ADL-3 iteration 2 — the histogram IS part of the payload — 2026-06-11
+
+- USER: "why isn't the histogram part of the payload?" — the M9<-M23 integration gap, fixed
+  upstream as graphed-preserve M25 (HISTOGRAM_PLUGIN: payload = the fill's canonical spec,
+  synthesized at build from node params; build_bundle histogram-terminal path; reproduce()
+  returns the histogram itself).
+- preservation.py rewired: record_q5 ENDS AT a hist.graphed fill (no value/weight/spec triple);
+  preserve_q5 passes payloads={} — the spec payload synthesizes; rerun_preserved evaluates the
+  reduced IR (fill terminal) per partition -> per-chunk filled histograms summed by native +.
+- tests pin: the externals manifest carries kind=histogram with a sha256 content hash; the
+  manifest's separate histogram spec is None; 'external' present in BOTH preserved and reduced
+  kinds (the fill rides the graph through optimization); reproduce/rerun bit-for-bit
+  (flow-inclusive); totals equal the acceptance reference's flow-inclusive sum.
+- notebook: inspect() now shows the histogram payload line; the optimized-graph table includes
+  the external terminal; markdown tells the payload story; executed (61 -> 13 nodes).

@@ -69,21 +69,28 @@ def test_crashed_run_resumes_bit_for_bit(tmp_path):
 
 
 def test_preserved_q5_bundle_inspects_and_reproduces(tmp_path):
+    import boost_histogram as bh
     from graphed_preserve import inspect as inspect_bundle
     from graphed_preserve import reproduce
 
     bundle, build_reference = preservation.preserve_q5(tmp_path / "bundle", SKIM)
 
+    # THE HISTOGRAM IS PART OF THE PAYLOAD (graphed-preserve M25): the fill node's canonical
+    # spec is a content-addressed external payload, synthesized at build (payloads={} above)
+    entry = next(e for e in bundle.manifest["externals"] if e["kind"] == "histogram")
+    assert entry["content_hash"].startswith("sha256:")
+    assert bundle.manifest["analysis"]["histogram"] is None  # no spec triple: the fill IS terminal
+
     rendered = inspect_bundle(bundle)  # renders WITHOUT executing or resolving data
-    assert "events" in rendered
-    assert "opaque" not in rendered.lower() or "0" in rendered  # nothing cloudpickled in q5
+    assert "events" in rendered and "histogram" in rendered
+    assert "PRESERVATION RISK" not in rendered
 
-    got = np.asarray(reproduce(bundle), dtype=float)
-    assert np.array_equal(got, build_reference)  # bit-for-bit, from the bundle alone
+    got = reproduce(bundle)  # the histogram ITSELF comes back
+    assert isinstance(got, bh.Histogram)
+    assert np.array_equal(got.values(flow=True), build_reference.values(flow=True))
 
-    # consistent with the acceptance reference: same selection, in-range totals agree
-    ref_total_inrange = float(np.asarray(REF["q5"]["q5"])[1:-1].sum())  # strip flow
-    assert got.sum() == ref_total_inrange
+    # consistent with the acceptance reference: same selection, totals agree (flow-inclusive)
+    assert float(got.sum(flow=True)) == float(np.asarray(REF["q5"]["q5"]).sum())
 
 
 def test_rerun_of_the_preserved_analysis_optimizes_retargets_and_parallelizes(tmp_path):
@@ -95,17 +102,23 @@ def test_rerun_of_the_preserved_analysis_optimizes_retargets_and_parallelizes(tm
 
     bundle, _build_ref = preservation.preserve_q5(tmp_path / "bundle", SKIM)
 
-    # the bundle preserves opt_level=0 (auditable, NO stages); the re-run REDUCES it first
+    # the bundle preserves opt_level=0 (auditable, NO stages); the re-run REDUCES it first.
+    # the preserved graph now INCLUDES the histogram fill (an external node)
     _ir, stats = preservation.optimized_ir(bundle)
     assert "stage" not in stats["preserved_kinds"]  # 1:1 with the user's ops as preserved
+    assert "external" in stats["preserved_kinds"]  # the FILL is preserved, in the graph
     assert "stage" in stats["reduced_kinds"]  # fused for execution
+    assert "external" in stats["reduced_kinds"]  # ... with the fill still its terminal
     assert stats["reduced_nodes"] < stats["preserved_nodes"] / 2  # the collapse is real
     assert sum(stats["stage_members"]) > 0  # the user's ops live INSIDE the stages
 
-    # re-target at a DIFFERENT input dataset (a copy under a new name) through a process pool
+    # re-target at a DIFFERENT input dataset (a copy under a new name) through a process pool;
+    # each worker evaluates the REDUCED IR whose terminal is the fill -> per-chunk histograms
     retarget = tmp_path / "Run2012B_SingleMu_50k_retarget.root"
     shutil.copy(SKIM, retarget)
-    counts, _ = preservation.rerun_preserved(
+    rerun, _ = preservation.rerun_preserved(
         bundle, [str(retarget) + ":Events"], executor=ProcessExecutor(max_workers=2)
     )
-    assert np.array_equal(counts, np.asarray(reproduce(bundle), dtype="float64"))
+    assert np.array_equal(
+        np.asarray(rerun.values(flow=True)), np.asarray(reproduce(bundle).values(flow=True))
+    )
