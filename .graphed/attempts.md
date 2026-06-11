@@ -170,3 +170,14 @@
   unflatten:29 <- the bug); gd.run at BOTH levels raises StageError at the SAME debugging.py:29
   (pinned: same op, same line, err.opt_level distinguishes; the fused member's provenance
   equals the StageError's user_frame). Fusion never costs the traceback.
+
+## ADL-2 closeout — the local full-file sweep — 2026-06-11
+
+- Run2012B_SingleMu.root (16 GB, 53,446,198 events) downloaded via xrootd (user-assisted; the
+  eospublic link stalls hard — resumable xrdcp --continue + stream timeouts recommended).
+- The 24-point grid (8 queries x workers {1,4,8} x chunk 2^19, persistent pools) completed
+  cleanly: every pass 102 chunks over all 53.4M events. results_local.csv + RESULTS_LOCAL.md.
+- Projection visible at scale (q1: 0.23 GB of 16 GB); near-linear scaling 3.5-3.7x@4 /
+  5.2-5.8x@8 for I/O+compute queries; q6 (trijet combinatorics) is memory-bandwidth-bound and
+  REGRESSES at 8 workers (167 s vs 113 s at 4) — recorded honestly; the chunksize axis is the
+  lever (per-query chunk policy = Phase-2 harness refinement).
