@@ -35,15 +35,21 @@ def test_entry_target_partitions_tile_exactly():
     assert parts[0].entry_start == 0
     assert parts[-1].entry_stop == N
     spans = [(p.entry_start, p.entry_stop) for p in parts]
-    assert all(b == c for (_, b), (c, _) in zip(spans, spans[1:]))  # contiguous, gapless
-    assert all(b - a == 2**13 for a, b in spans[:-1])  # full-size chunks except the tail
+    assert all(
+        b == c for (_, b), (c, _) in zip(spans, spans[1:])
+    )  # contiguous, gapless
+    assert all(
+        b - a == 2**13 for a, b in spans[:-1]
+    )  # full-size chunks except the tail
 
 
 def test_benchmark_point_metrics_and_counts():
     point = benchmark.run_benchmark("q4", WHERE, chunksize=2**13)
     assert point["entries"] == N
     assert point["chunks"] == math.ceil(N / 2**13)
-    assert 0 < point["bytesread"] <= 2 * os.path.getsize(SKIM)  # projected reads, real accounting
+    assert (
+        0 < point["bytesread"] <= 2 * os.path.getsize(SKIM)
+    )  # projected reads, real accounting
     assert point["walltime"] > 0 and point["MB/s/core"] > 0
     got = np.asarray(point["hists"]["q4"].values(flow=True))
     assert np.allclose(got, np.asarray(REF["q4"]["q4"]))
@@ -60,7 +66,9 @@ def test_q6_is_one_pass_with_two_histograms():
     point = benchmark.run_benchmark("q6", WHERE, chunksize=2**14)
     assert set(point["hists"]) == {"trijetpt", "maxbtag"}
     for label, h in point["hists"].items():
-        assert np.allclose(np.asarray(h.values(flow=True)), np.asarray(REF["q6"][label]))
+        assert np.allclose(
+            np.asarray(h.values(flow=True)), np.asarray(REF["q6"][label])
+        )
 
 
 def test_parallel_point_through_a_persistent_pool():
@@ -68,8 +76,29 @@ def test_parallel_point_through_a_persistent_pool():
     from graphed_exec_local import ProcessExecutor
 
     with ProcessExecutor(max_workers=2, persistent=True) as ex:
-        point = benchmark.run_benchmark("q5", WHERE, chunksize=2**14, executor=ex, workers=2)
+        point = benchmark.run_benchmark(
+            "q5", WHERE, chunksize=2**14, executor=ex, workers=2
+        )
     assert point["entries"] == N
     assert np.allclose(
         np.asarray(point["hists"]["q5"].values(flow=True)), np.asarray(REF["q5"]["q5"])
     )
+
+
+def test_combined_plan_matches_per_query_plans():
+    """All eight queries in ONE compiled plan (one data pass) reproduce each per-query plan's
+    histograms exactly — the speedup benchmark times this combined plan so that both runners
+    open each file exactly once (resource symmetry)."""
+    import numpy as np
+    from graphed.write import SequentialRunner
+
+    plan, labels = benchmark.build_combined_plan(WHERE, 25000)
+    combined = SequentialRunner().run(plan).value
+    assert combined.entries == 50000
+    for qname in ("q1", "q5", "q7"):
+        per_query, q_labels = benchmark.build_plan(qname, WHERE, 25000)
+        got = combined.hists[labels.index(qname)]
+        want = SequentialRunner().run(per_query).value.hists[q_labels.index(qname)]
+        assert np.array_equal(
+            np.asarray(got.values(flow=True)), np.asarray(want.values(flow=True))
+        )

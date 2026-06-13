@@ -37,7 +37,8 @@ def entry_target_partitions(files: list[str], chunksize: int) -> tuple[Any, ...]
         path, _, tree = where.rpartition(":")
         n = uproot.open(where).num_entries
         out.extend(
-            Partition(path, tree, lo, min(lo + chunksize, n)) for lo in range(0, n, chunksize)
+            Partition(path, tree, lo, min(lo + chunksize, n))
+            for lo in range(0, n, chunksize)
         )
     return tuple(out)
 
@@ -96,21 +97,43 @@ class _Empty:
     def __call__(self) -> _Partial:
         from graphed_histogram import zero_of
 
-        return _Partial(hists=tuple(zero_of(s) for s in self.specs), bytesread=0, entries=0)
+        return _Partial(
+            hists=tuple(zero_of(s) for s in self.specs), bytesread=0, entries=0
+        )
 
 
 def build_plan(qname: str, files: list[str], chunksize: int) -> tuple[Any, list[str]]:
     """Record query ``qname``, compile ALL its fills into ONE graph, and build the measured plan
     over entry-target partitions. Returns ``(plan, histogram_labels)``."""
+    return _build_plan_for(([qname], files, chunksize))
+
+
+def build_combined_plan(
+    files: list[str], chunksize: int, qnames: "list[str] | None" = None
+) -> tuple[Any, list[str]]:
+    """EVERY query's fills compiled into ONE graph and ONE plan — a single pass over the data
+    evaluates all of them per partition. This is both the efficient way to run the full suite
+    and the FAIR way to time it: each runner opens each file exactly once."""
+    return _build_plan_for((list(qnames or adl.QUERIES), files, chunksize))
+
+
+def _build_plan_for(spec: tuple[list[str], list[str], int]) -> tuple[Any, list[str]]:
+    qnames, files, chunksize = spec
     from graphed import compile_ir
     from graphed_core.execution import Plan, Task
     from graphed_histogram import spec_of
     from uproot._graphed import _evaluation_columns
 
     g = uproot.graphed(files, library="ak", behavior=adl.behavior())
-    staged = adl.QUERIES[qname](g)
-    if not isinstance(staged, dict):
-        staged = {qname: staged}
+    staged: dict[str, Any] = {}
+    for qname in qnames:
+        one = adl.QUERIES[qname](g)
+        if not isinstance(one, dict):
+            one = {qname: one}
+        for label, h in one.items():
+            staged[
+                label if label == qname or len(qnames) == 1 else f"{qname}/{label}"
+            ] = h
     labels = list(staged)
     fill_nodes = [h.fill_nodes()[0] for h in staged.values()]
     session = g.session

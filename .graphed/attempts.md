@@ -190,3 +190,23 @@
   q6's docstring now states the cartesian-zip requirement plainly; the module docstring and the
   preservation markdown lose their internal-history parentheticals. The engineering rationale
   remains in this attempts log and the git history, where it belongs.
+
+## ADL-5 — the speedup audit + honest benchmarking methodology — 2026-06-13
+
+- USER: 4 workers showed only ~2.8x; audit why. FOUND (measured, in order of discovery):
+  (1) ~0.5s/pass of serial driver work (source open + typetracer recording) inside the timed
+  region — Amdahl alone predicts the observed 2.75x/3.08x EXACTLY; (2) warming the pool on the
+  measured files lets workers answer from read caches (fake 17x); (3) per-query plans give
+  pool workers cross-plan file-handle reuse the per-run SequentialRunner lacks (fake 5.5x the
+  other way); (4) the skim stores one basket per branch, so chunking re-decompresses whole
+  baskets — sequential time grows ~linearly with chunk count, manufacturing fake speedup
+  against the pool's flat overhead floor; (5) with all distortions removed, per-task overhead
+  (~40-80ms: uproot metadata open + IPC round trip) vs ~100ms tasks is the honest story at
+  this scale: 8 files can lose to sequential; 32 files -> ~3.3x; the 16GB sweep's 3.5-3.7x is
+  the at-scale truth.
+- Implemented (user solutions 1+4): benchmark.build_combined_plan (all 8 queries, ONE compiled
+  graph, one data pass — also the fairness fix for (3); per-query build_plan delegates to the
+  same builder, parity pinned in tests); the notebook speedup section now compiles outside the
+  timed region, warms a FRESH pool on a separate warm-up file, uses one task per file, and the
+  markdown teaches each distortion with the measured fake numbers. Solutions 2+3 (pipelining,
+  basket-aligned partitioning) recorded as root-prompt R19.6 Phase-2 items.
