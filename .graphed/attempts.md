@@ -228,3 +228,18 @@
   methodology; the cell now WARMS then takes the MEDIAN of several runs (the methodology is in
   the code, not just described). Executed medians: 8 files 3.15x (sub-second, jitter-limited),
   32 files 4.35x. Gated via the precommit script.
+
+## ADL-7 — 50-sample violin plot for the speedup benchmark — 2026-06-13
+
+- USER: run each component 50 times, violin plot instead of the single-measurement bar chart.
+- Measurement cell: sample_times() warms twice then collects N_SAMPLES=50 timed runs per
+  (dataset, runner); stored as distributions. Chart: matplotlib violinplot per dataset (seq vs
+  4-workers), showmedians, titled with the median speedup. Narrative rule 3 updated (50 samples
+  + violin, not "median of several runs").
+- Measured medians (50 samples, executed): 8 files seq 0.88s[0.80-1.03] / par 0.21s[0.16-0.26]
+  -> 4.24x; 32 files seq 3.67s[3.24-4.03] / par 0.76s[0.68-1.24] -> 4.79x. Narrative ALIGNED to
+  these (R0.11) — the prior "~3x at 8 files" was a noisier single-median estimate; 50-sample
+  median is 4.2x. The >4x is explained honestly: SequentialRunner allocates fresh _LocalResources
+  per run (write.py:63, re-opens files each run) while the persistent pool's workers keep
+  open_once handles across all 50 runs, so the parallel side also saves repeated file opens; the
+  16GB per-query figure (compute-dominated) is the honest 3.5-3.7x.
