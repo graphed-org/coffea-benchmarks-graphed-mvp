@@ -243,3 +243,17 @@
   per run (write.py:63, re-opens files each run) while the persistent pool's workers keep
   open_once handles across all 50 runs, so the parallel side also saves repeated file opens; the
   16GB per-query figure (compute-dominated) is the honest 3.5-3.7x.
+
+## ADL-8 — re-evaluate after the review-fix sweep — 2026-06-13
+
+- Re-executed the notebook against the fixed siblings (graphed-core M33 bounded resources,
+  graphed-exec-local M34 dedup+bounded cache, graphed M35 iterative walk, preserve M36 memo).
+  The fixes are behavior-preserving at this scale (no eviction: 8/32 files < the 128 handle
+  bound and the single combined-plan process < the 32-process cache), so results are unchanged
+  modulo measurement noise: 50-sample medians 4.37x (8 files) / 4.52x (32) this run vs 4.81/4.66
+  last run. 0 errors, violin regenerated.
+- Narrative made noise-robust per R0.11: instead of a hard-coded "~4.7-4.8x" (which drifts run
+  to run at this sub-second scale), the prose now states "at or just above the ideal 4x" and
+  defers the exact median to the cell output + the violins' spread. The open_once-asymmetry
+  explanation is still accurate (M33's SequentialRunner.close() does not change that it makes
+  fresh per-run resources; persistent-pool workers still keep handles within the 128 bound).
