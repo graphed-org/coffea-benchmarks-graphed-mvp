@@ -174,7 +174,7 @@ def run_benchmark(
     """One measured benchmark point. ``executor=None`` runs the sequential reference runner;
     pass a (preferably persistent) executor for parallel points — its spawn cost then sits
     outside the measured loop, matching how the original harness reuses its pool."""
-    from graphed.write import SequentialRunner
+    from graphed_core.execution import SequentialRunner
 
     tic = time.perf_counter()
     plan, labels = build_plan(qname, files, chunksize)

@@ -235,7 +235,7 @@ def rerun_preserved(
 ) -> tuple[Any, dict[str, Any]]:
     """Re-target the preserved analysis at NEW input files and run its OPTIMIZED graph partition
     by partition through any R7 executor. Returns (the aggregated histogram, optimization stats)."""
-    from graphed.write import SequentialRunner
+    from graphed_core.execution import SequentialRunner
     from graphed_core.execution import Plan, Task
 
     import benchmark

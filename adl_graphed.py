@@ -195,7 +195,7 @@ def run_query(name: str, where: str, *, steps_per_file: int = 5, executor: Any |
     """Record query ``name`` over ``where`` (a ``path:tree`` string) and aggregate its
     histogram(s). Returns ``{histogram_name: concrete hist.Hist}``."""
     import uproot
-    from graphed.write import SequentialRunner
+    from graphed_core.execution import SequentialRunner
 
     g = uproot.graphed(where, library="ak", behavior=behavior())
     staged = QUERIES[name](g)
