@@ -210,3 +210,21 @@
   timed region, warms a FRESH pool on a separate warm-up file, uses one task per file, and the
   markdown teaches each distortion with the measured fake numbers. Solutions 2+3 (pipelining,
   basket-aligned partitioning) recorded as root-prompt R19.6 Phase-2 items.
+
+## ADL-6 — measured-facts correction + ship-once executor — 2026-06-13
+
+- USER pushed on the "40-80ms per-task overhead" claim. MEASURED it: the persistent-pool
+  framework round-trip is ~0.08ms/task (no-op task), NOT 40-80ms — that figure was fabricated
+  to rationalize a sub-1x run whose real cause was under-warming (open_once caches files
+  per-worker; the pool dispatches to any free worker, so a single timed pass re-reads files
+  cold ~30ms each) + sub-second jitter. Per-task pure WORK is ~105ms. Codified the lesson as
+  root prompt R0.11 (claims grounded in measured facts) + memory.
+- Implemented ship-the-process-once upstream (graphed-exec-local M31, freeze-M31-0, R7.10):
+  process broadcast to workers once, cached by content hash, per-task messages carry only
+  (token, partition). Negligible at this payload size (measured) but architecturally correct
+  for large embedded IR; pinned by a per-worker unpickle-count witness.
+- Notebook speedup section corrected: false 40-80ms claim removed and explained; narrative now
+  states the MEASURED facts (round-trip ~0.08ms, work ~105ms, R7.10 ship-once) with its
+  methodology; the cell now WARMS then takes the MEDIAN of several runs (the methodology is in
+  the code, not just described). Executed medians: 8 files 3.15x (sub-second, jitter-limited),
+  32 files 4.35x. Gated via the precommit script.
