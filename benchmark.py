@@ -65,8 +65,7 @@ class _BenchFill:
     backend_ref: str
 
     def __call__(self, partition: Any, resources: Any) -> _Partial:
-        from graphed import evaluate_ir
-        from graphed_histogram.boost import _resolve_backend
+        from graphed import evaluate_ir, resolve_backend
 
         directory = resources.open_once(partition.uri, uproot.open)
         before = directory.file.source.num_requested_bytes
@@ -75,7 +74,7 @@ class _BenchFill:
         nbytes = directory.file.source.num_requested_bytes - before
         fills = evaluate_ir(
             self.ir,
-            _resolve_backend(self.backend_ref),
+            resolve_backend(self.backend_ref),
             {self.source_name: chunk},
             externals=dict(self.evaluators),
         )
@@ -119,10 +118,9 @@ def build_combined_plan(
 
 def _build_plan_for(spec: tuple[list[str], list[str], int]) -> tuple[Any, list[str]]:
     qnames, files, chunksize = spec
-    from graphed import compile_ir
+    from graphed import compile_ir, read_columns
     from graphed_core.execution import Plan, Task
     from graphed_histogram import spec_of
-    from uproot._graphed import _evaluation_columns
 
     g = uproot.graphed(files, library="ak", behavior=adl.behavior())
     staged: dict[str, Any] = {}
@@ -139,9 +137,10 @@ def _build_plan_for(spec: tuple[list[str], list[str], int]) -> tuple[Any, list[s
     session = g.session
 
     ((nid, source),) = session.sources().items()
-    columns: set[str] = set()
-    for node in fill_nodes:
-        columns.update(_evaluation_columns(node, nid, source._common_keys))
+    # graphed.read_columns: the union of source columns all fills syntactically touch (walking through
+    # the histogram External nodes), or None when a fill consumes the whole record -> read everything.
+    projected = read_columns(fill_nodes, nid)
+    columns = tuple(source._common_keys) if projected is None else projected
     compiled = compile_ir(session, *fill_nodes)
 
     evaluators: dict[str, Any] = {}
@@ -150,7 +149,7 @@ def _build_plan_for(spec: tuple[list[str], list[str], int]) -> tuple[Any, list[s
     process = _BenchFill(
         ir=bytes(compiled.ir),
         source_name=session.source_name(nid),
-        columns=tuple(k for k in source._common_keys if k in columns),
+        columns=columns,
         specs=tuple(spec_of(h) for h in staged.values()),
         evaluators=tuple(evaluators.items()),
         backend_ref="adl_graphed:make_backend",
