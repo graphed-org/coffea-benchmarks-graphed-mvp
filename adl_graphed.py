@@ -196,17 +196,18 @@ def run_query(name: str, where: str, *, steps_per_file: int = 5, executor: Any |
     histogram(s). Returns ``{histogram_name: concrete hist.Hist}``."""
     import uproot
     from graphed_core.execution import SequentialRunner
+    from graphed_histogram import plan as plan_group
 
     g = uproot.graphed(where, library="ak", behavior=behavior())
     staged = QUERIES[name](g)
     if not isinstance(staged, dict):
         staged = {name: staged}
     runner = executor if executor is not None else SequentialRunner()
-    out = {}
-    for label, h in staged.items():
-        plan = h.plan(steps_per_file=steps_per_file, backend="adl_graphed:make_backend")
-        out[label] = _wrap(runner.run(plan).value)
-    return out
+    # ONE plan for ALL the query's histograms: a shared sub-graph (e.g. the trijet selection feeding
+    # both the pT and b-tag histograms) is read and evaluated ONCE, not once per output histogram —
+    # dask's compute(dict_of_hists) parity. (Was: a separate plan per histogram, re-reading the data.)
+    plan = plan_group(staged, steps_per_file=steps_per_file, backend="adl_graphed:make_backend")
+    return {label: _wrap(h) for label, h in runner.run(plan).value.items()}
 
 
 def _wrap(value: Any) -> Any:
