@@ -72,8 +72,8 @@ def test_q6_is_one_pass_with_two_histograms():
 
 
 def test_parallel_point_through_a_persistent_pool():
-    pytest.importorskip("graphed_exec_local")
-    from graphed_exec_local import ProcessExecutor
+    pytest.importorskip("graphed_executors.local")
+    from graphed_executors.local import ProcessExecutor
 
     with ProcessExecutor(max_workers=2, persistent=True) as ex:
         point = benchmark.run_benchmark(

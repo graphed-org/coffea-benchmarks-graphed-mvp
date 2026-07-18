@@ -32,7 +32,7 @@ def main() -> None:
 
     files = [f if ":" in os.path.basename(f) else f + ":Events" for f in args.files]
     rows = []
-    from graphed_exec_local import ProcessExecutor
+    from graphed_executors.local import ProcessExecutor
 
     for nworkers in args.workers:
         executor = None

@@ -96,8 +96,8 @@ def test_preserved_q5_bundle_inspects_and_reproduces(tmp_path):
 def test_rerun_of_the_preserved_analysis_optimizes_retargets_and_parallelizes(tmp_path):
     import shutil
 
-    pytest.importorskip("graphed_exec_local")
-    from graphed_exec_local import ProcessExecutor
+    pytest.importorskip("graphed_executors.local")
+    from graphed_executors.local import ProcessExecutor
     from graphed.preserve import reproduce
 
     bundle, _build_ref = preservation.preserve_q5(tmp_path / "bundle", SKIM)

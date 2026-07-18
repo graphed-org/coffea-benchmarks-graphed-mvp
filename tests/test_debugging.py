@@ -15,7 +15,7 @@ import pytest
 
 pytest.importorskip("graphed.awkward")
 pytest.importorskip("graphed.debug")
-pytest.importorskip("graphed_exec_local")
+pytest.importorskip("graphed_executors.local")
 
 import graphed.debug as gd  # noqa: E402
 
@@ -36,7 +36,7 @@ def test_record_time_errors_carry_the_users_line():
 
 
 def test_worker_stage_errors_cross_the_process_boundary_intact():
-    from graphed_exec_local import ProcessExecutor
+    from graphed_executors.local import ProcessExecutor
 
     plan = debugging.faulty_plan(WHERE, chunksize=2**14)
     with pytest.raises(gd.StageError) as exc:  # a REAL StageError, re-raised by the driver

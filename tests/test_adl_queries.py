@@ -46,8 +46,8 @@ def test_query_matches_the_coffea_reference_bit_for_bit(qname):
 def test_query_parallel_matches_the_reference_approximately(qname):
     """Every query through a SPAWNED process pool (>=2 workers). Exactness is the SEQUENTIAL
     tier's claim; here rounding-level agreement suffices (combine-tree float effects allowed)."""
-    pytest.importorskip("graphed_exec_local")
-    from graphed_exec_local import ProcessExecutor
+    pytest.importorskip("graphed_executors.local")
+    from graphed_executors.local import ProcessExecutor
 
     out = adl.run_query(qname, WHERE, steps_per_file=8, executor=ProcessExecutor(max_workers=2))
     for label, h in out.items():
@@ -66,8 +66,8 @@ def test_partitioning_does_not_change_any_count():
 def test_process_pool_aggregation_matches_with_behaviors_by_import_ref():
     # pinned against the SEQUENTIAL run (same platform by construction): the pool must change
     # nothing, with vector behaviors reaching workers by import ref
-    pytest.importorskip("graphed_exec_local")
-    from graphed_exec_local import ProcessExecutor
+    pytest.importorskip("graphed_executors.local")
+    from graphed_executors.local import ProcessExecutor
 
     sequential = adl.run_query("q6", WHERE, steps_per_file=3)
     sys.path.insert(0, HERE)  # spawn children inherit sys.path; adl_graphed resolves in workers
