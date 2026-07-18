@@ -42,7 +42,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "${{ env.GRAPHED }}" "${{ env.EXEC }}" "${{ env.HISTO }}" \
             "${{ env.UPROOT }}" "${{ env.HIST }}"
-          python -m pip install pytest vector coffea
+          # pyyaml: a recent coffea's nanoevents edm4hep schema imports `yaml` but doesn't pin it
+          python -m pip install pytest vector coffea pyyaml
           # coffea's resolver pulls PyPI uproot OVER the fork (the same trap hit locally):
           # the fork must win, and it satisfies coffea (uproot 5.x + the graphed additions)
           python -m pip install --force-reinstall --no-deps "${{ env.UPROOT }}"
