@@ -17,8 +17,8 @@ env:
   # pulls awkward + correctionlib + onnx for the bundle tests; checkpoint's cloudpickle is a base dep.
   GRAPHED: "graphed[awkward,numpy,preserve] @ git+https://github.com/graphed-org/graphed@main"
   # still-separate packages (each depends on the consolidated graphed):
-  EXEC: "graphed-executors @ git+https://github.com/graphed-org/graphed-executors@main"
-  HISTO: "graphed-histogram @ git+https://github.com/graphed-org/graphed-histogram@main"
+  EXEC: "graphed-executors"
+  HISTO: "graphed-histogram"
   UPROOT: "uproot @ git+https://github.com/graphed-org/uproot5-graphed-mvp@graphed-mvp"
   HIST: "hist @ git+https://github.com/graphed-org/hist-graphed-mvp@graphed-mvp"
 
