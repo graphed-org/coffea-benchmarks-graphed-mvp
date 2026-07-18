@@ -47,7 +47,7 @@ def hist_empty() -> np.ndarray:
 def durable_q1_plan(files: list[str], chunksize: int = 2**13) -> Any:
     """q1 as a durable, content-addressed plan: the COMPILED query IR is the plan's identity."""
     from graphed import compile_ir
-    from graphed_core import DurablePlan, OpSpec
+    from graphed.core import DurablePlan, OpSpec
 
     import adl_graphed as adl
     import benchmark
@@ -109,7 +109,7 @@ def record_q5(events: Any) -> tuple[Any, Any]:
     import boost_histogram as bh
     import graphed_histogram as gh
     from graphed import Session
-    from graphed_awkward import AwkwardBackend, from_awkward, gak
+    from graphed.awkward import AwkwardBackend, from_awkward, gak
 
     s = Session(AwkwardBackend())
     g = from_awkward(s, "events", events)
@@ -129,7 +129,7 @@ def preserve_q5(root: Any, skim_path: str) -> tuple[Any, Any]:
     """Build the q5 preservation bundle under ``root``; returns (bundle, build-time reference
     histogram). The HISTOGRAM IS PART OF THE PAYLOAD: the fill node's canonical spec is its
     content-addressed payload, synthesized at build — payloads={} and no histogram= spec."""
-    from graphed_preserve import build_bundle
+    from graphed.preserve import build_bundle
 
     events = load_events(skim_path)
     session, fill = record_q5(events)
@@ -143,7 +143,7 @@ def optimized_ir(bundle: Any) -> tuple[bytes, dict[str, Any]]:
     """The bundle's IR, REDUCED for execution. The bundle deliberately preserves opt_level=0
     (auditable, 1:1 with the user's ops, no stage fusion); a re-run reduces it first — DCE + CSE +
     equality-saturation stage fusion — and the returned stats make the collapse visible."""
-    from graphed_core import GraphStore
+    from graphed.core import GraphStore
 
     raw = bundle.store.get(bundle.manifest["analysis"]["ir"])
     assert raw is not None, "bundle IR missing from its store"
@@ -211,7 +211,7 @@ class _RetargetFill:
 
 
 def _bare_backend() -> Any:
-    from graphed_awkward import AwkwardBackend
+    from graphed.awkward import AwkwardBackend
 
     return AwkwardBackend()
 
@@ -235,8 +235,8 @@ def rerun_preserved(
 ) -> tuple[Any, dict[str, Any]]:
     """Re-target the preserved analysis at NEW input files and run its OPTIMIZED graph partition
     by partition through any R7 executor. Returns (the aggregated histogram, optimization stats)."""
-    from graphed_core.execution import SequentialRunner
-    from graphed_core.execution import Plan, Task
+    from graphed.core.execution import SequentialRunner
+    from graphed.core.execution import Plan, Task
 
     import benchmark
 

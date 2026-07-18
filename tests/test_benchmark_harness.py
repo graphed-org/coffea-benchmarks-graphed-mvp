@@ -15,7 +15,7 @@ import os
 import numpy as np
 import pytest
 
-pytest.importorskip("graphed_awkward")
+pytest.importorskip("graphed.awkward")
 pytest.importorskip("graphed_histogram")
 pytest.importorskip("hist.graphed")
 pytest.importorskip("vector")
@@ -90,7 +90,7 @@ def test_combined_plan_matches_per_query_plans():
     histograms exactly — the speedup benchmark times this combined plan so that both runners
     open each file exactly once (resource symmetry)."""
     import numpy as np
-    from graphed_core.execution import SequentialRunner
+    from graphed.core.execution import SequentialRunner
 
     plan, labels = benchmark.build_combined_plan(WHERE, 25000)
     combined = SequentialRunner().run(plan).value

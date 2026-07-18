@@ -16,13 +16,13 @@ from typing import Any
 import numpy as np
 
 import hist.graphed as hg
-from graphed_awkward import gak
+from graphed.awkward import gak
 
 
 def make_backend() -> Any:
     """Worker evaluation backend (import-ref target): vector behaviors registered."""
     import vector
-    from graphed_awkward import AwkwardBackend
+    from graphed.awkward import AwkwardBackend
 
     vector.register_awkward()
     return AwkwardBackend(behavior=vector.backends.awkward.behavior)
@@ -195,7 +195,7 @@ def run_query(name: str, where: str, *, steps_per_file: int = 5, executor: Any |
     """Record query ``name`` over ``where`` (a ``path:tree`` string) and aggregate its
     histogram(s). Returns ``{histogram_name: concrete hist.Hist}``."""
     import uproot
-    from graphed_core.execution import SequentialRunner
+    from graphed.core.execution import SequentialRunner
     from graphed_histogram import plan as plan_group
 
     g = uproot.graphed(where, library="ak", behavior=behavior())

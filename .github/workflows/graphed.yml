@@ -12,17 +12,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CORE: "graphed-core @ git+https://github.com/graphed-org/graphed-core-mvp@main"
-  DEBUG: "graphed-debug @ git+https://github.com/graphed-org/graphed-debug-mvp@main"
-  FRONTEND: "graphed @ git+https://github.com/graphed-org/graphed-mvp@main"
-  NUMPY: "graphed-numpy @ git+https://github.com/graphed-org/graphed-numpy-mvp@main"
-  AWKWARD: "graphed-awkward @ git+https://github.com/graphed-org/graphed-awkward-mvp@main"
+  # graphed core/frontend/numpy/awkward/debug/checkpoint/preserve are now ONE consolidated package
+  # (graphed.core / graphed.awkward / graphed.checkpoint / graphed.preserve). The [preserve] extra
+  # pulls awkward + correctionlib + onnx for the bundle tests; checkpoint's cloudpickle is a base dep.
+  GRAPHED: "graphed[awkward,numpy,preserve] @ git+https://github.com/graphed-org/graphed@main"
+  # still-separate packages (each depends on the consolidated graphed):
   EXEC: "graphed-exec-local @ git+https://github.com/graphed-org/graphed-exec-local-mvp@main"
   HISTO: "graphed-histogram @ git+https://github.com/graphed-org/graphed-histogram-mvp@main"
   UPROOT: "uproot @ git+https://github.com/graphed-org/uproot5-graphed-mvp@graphed-mvp"
   HIST: "hist @ git+https://github.com/graphed-org/hist-graphed-mvp@graphed-mvp"
-  CHECKPOINT: "graphed-checkpoint @ git+https://github.com/graphed-org/graphed-checkpoint-mvp@main"
-  PRESERVE: "graphed-preserve @ git+https://github.com/graphed-org/graphed-preserve-mvp@main"
 
 jobs:
   tests:
@@ -42,9 +40,8 @@ jobs:
       - name: Install the graphed stack + the reader/hist forks
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "${{ env.CORE }}" "${{ env.DEBUG }}" "${{ env.FRONTEND }}" \
-            "${{ env.NUMPY }}" "${{ env.AWKWARD }}" "${{ env.EXEC }}" "${{ env.HISTO }}" \
-            "${{ env.UPROOT }}" "${{ env.HIST }}" "${{ env.CHECKPOINT }}" "${{ env.PRESERVE }}"
+          python -m pip install "${{ env.GRAPHED }}" "${{ env.EXEC }}" "${{ env.HISTO }}" \
+            "${{ env.UPROOT }}" "${{ env.HIST }}"
           python -m pip install pytest vector coffea
           # coffea's resolver pulls PyPI uproot OVER the fork (the same trap hit locally):
           # the fork must win, and it satisfies coffea (uproot 5.x + the graphed additions)

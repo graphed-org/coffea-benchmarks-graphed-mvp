@@ -16,9 +16,9 @@ import os
 import numpy as np
 import pytest
 
-pytest.importorskip("graphed_awkward")
-pytest.importorskip("graphed_checkpoint")
-pytest.importorskip("graphed_preserve")
+pytest.importorskip("graphed.awkward")
+pytest.importorskip("graphed.checkpoint")
+pytest.importorskip("graphed.preserve")
 pytest.importorskip("vector")
 
 import benchmark  # noqa: E402
@@ -38,7 +38,7 @@ def _q1_reference() -> np.ndarray:
 
 
 def test_resumable_q1_matches_and_a_second_run_skips_everything(tmp_path):
-    from graphed_checkpoint import Store, run_resumable
+    from graphed.checkpoint import Store, run_resumable
 
     plan = preservation.durable_q1_plan(WHERE, CHUNK)
     store = Store(tmp_path / "store")
@@ -53,8 +53,8 @@ def test_resumable_q1_matches_and_a_second_run_skips_everything(tmp_path):
 
 
 def test_crashed_run_resumes_bit_for_bit(tmp_path):
-    from graphed_checkpoint import Store, run_resumable
-    from graphed_checkpoint.runner import _SimulatedInterrupt
+    from graphed.checkpoint import Store, run_resumable
+    from graphed.checkpoint.runner import _SimulatedInterrupt
 
     plan = preservation.durable_q1_plan(WHERE, CHUNK)
     store = Store(tmp_path / "store")
@@ -70,8 +70,8 @@ def test_crashed_run_resumes_bit_for_bit(tmp_path):
 
 def test_preserved_q5_bundle_inspects_and_reproduces(tmp_path):
     import boost_histogram as bh
-    from graphed_preserve import inspect as inspect_bundle
-    from graphed_preserve import reproduce
+    from graphed.preserve import inspect as inspect_bundle
+    from graphed.preserve import reproduce
 
     bundle, build_reference = preservation.preserve_q5(tmp_path / "bundle", SKIM)
 
@@ -98,7 +98,7 @@ def test_rerun_of_the_preserved_analysis_optimizes_retargets_and_parallelizes(tm
 
     pytest.importorskip("graphed_exec_local")
     from graphed_exec_local import ProcessExecutor
-    from graphed_preserve import reproduce
+    from graphed.preserve import reproduce
 
     bundle, _build_ref = preservation.preserve_q5(tmp_path / "bundle", SKIM)
 

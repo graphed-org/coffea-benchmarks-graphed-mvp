@@ -22,7 +22,7 @@ import uproot
 def faulty_q4(g: Any) -> Any:
     """A buggy take on q4's jet handling: rebuild the jagged jets from flat pt — with the
     counts off by one. Records cleanly; fails on real data."""
-    from graphed_awkward import gak
+    from graphed.awkward import gak
 
     flat_pt = gak.flatten(g.Jet_pt, axis=1)
     counts = gak.num(g.Jet_pt, axis=1) + 1  # BUG: off-by-one counts
@@ -32,12 +32,12 @@ def faulty_q4(g: Any) -> Any:
 
 def run_faulty_chunk(partition: Any, resources: Any) -> Any:
     """Worker task (module-level, picklable): record + run the faulty analysis over THIS
-    partition's real data. ``graphed_debug.run`` raises the source-mapped ``StageError``, which
+    partition's real data. ``graphed.debug.run`` raises the source-mapped ``StageError``, which
     crosses the process boundary intact."""
     import awkward as ak
-    import graphed_debug as gd
+    import graphed.debug as gd
     from graphed import Session
-    from graphed_awkward import AwkwardBackend, from_awkward
+    from graphed.awkward import AwkwardBackend, from_awkward
 
     raw = uproot.open(f"{partition.uri}:{partition.tree}").arrays(
         ["Jet_pt"], entry_start=partition.entry_start, entry_stop=partition.entry_stop
@@ -61,7 +61,7 @@ def _zero() -> Any:
 
 def faulty_plan(files: list[str], chunksize: int = 2**14) -> Any:
     """The faulty analysis as a task graph over real partitions (for the process-pool demo)."""
-    from graphed_core.execution import Plan, Task
+    from graphed.core.execution import Plan, Task
 
     import benchmark
 

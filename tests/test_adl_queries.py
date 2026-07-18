@@ -20,7 +20,7 @@ import sys
 import numpy as np
 import pytest
 
-pytest.importorskip("graphed_awkward")
+pytest.importorskip("graphed.awkward")
 pytest.importorskip("graphed_histogram")
 pytest.importorskip("hist.graphed")
 pytest.importorskip("vector")
@@ -96,7 +96,7 @@ def test_recording_is_deterministic():
 def test_queries_read_only_what_they_touch():
     # project the FILL EXPRESSION (an External fill node is opaque to projection, by design)
     import uproot
-    from graphed_awkward import gak
+    from graphed.awkward import gak
 
     g = uproot.graphed(WHERE, library="ak", behavior=adl.behavior())
     expr = g.MET_pt[gak.sum(g.Jet_pt > 40.0, axis=1) >= 2]  # q4's fill input, verbatim

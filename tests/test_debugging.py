@@ -13,11 +13,11 @@ import os
 
 import pytest
 
-pytest.importorskip("graphed_awkward")
-pytest.importorskip("graphed_debug")
+pytest.importorskip("graphed.awkward")
+pytest.importorskip("graphed.debug")
 pytest.importorskip("graphed_exec_local")
 
-import graphed_debug as gd  # noqa: E402
+import graphed.debug as gd  # noqa: E402
 
 import debugging  # noqa: E402
 
@@ -60,7 +60,7 @@ def test_the_user_traceback_survives_higher_optimization_levels():
     import awkward as ak
     import uproot
     from graphed import Session
-    from graphed_awkward import AwkwardBackend, from_awkward
+    from graphed.awkward import AwkwardBackend, from_awkward
 
     raw = uproot.open(WHERE[0]).arrays(["Jet_pt"], entry_stop=1000)
     s = Session(AwkwardBackend())

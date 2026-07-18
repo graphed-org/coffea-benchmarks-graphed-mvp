@@ -30,7 +30,7 @@ import adl_graphed as adl
 def entry_target_partitions(files: list[str], chunksize: int) -> tuple[Any, ...]:
     """Eager partitions of ~``chunksize`` entries per task, tiling each ``path:tree`` exactly
     (metadata entry counts only — no branch data is read here)."""
-    from graphed_core import Partition
+    from graphed.core import Partition
 
     out = []
     for where in files:
@@ -119,7 +119,7 @@ def build_combined_plan(
 def _build_plan_for(spec: tuple[list[str], list[str], int]) -> tuple[Any, list[str]]:
     qnames, files, chunksize = spec
     from graphed import compile_ir, read_columns
-    from graphed_core.execution import Plan, Task
+    from graphed.core.execution import Plan, Task
     from graphed_histogram import spec_of
 
     g = uproot.graphed(files, library="ak", behavior=adl.behavior())
@@ -173,7 +173,7 @@ def run_benchmark(
     """One measured benchmark point. ``executor=None`` runs the sequential reference runner;
     pass a (preferably persistent) executor for parallel points — its spawn cost then sits
     outside the measured loop, matching how the original harness reuses its pool."""
-    from graphed_core.execution import SequentialRunner
+    from graphed.core.execution import SequentialRunner
 
     tic = time.perf_counter()
     plan, labels = build_plan(qname, files, chunksize)
