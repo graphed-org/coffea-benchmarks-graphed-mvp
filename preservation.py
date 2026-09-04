@@ -195,17 +195,19 @@ class _RetargetFill:
     fill — over one partition of a NEW input file. Each chunk yields a filled histogram."""
 
     ir: bytes
-    spec: str
+    spec: str  # the BARE canonical spec (payload before its "\x00" discriminator suffix)
+    chash: str  # the fill node's identity = hash of the FULL discriminated payload (externals key)
 
     def __call__(self, partition: Any, resources: Any) -> Any:
         from graphed import evaluate_ir
         from graphed_histogram.boost import FillEvaluator
 
         chunk = _events_slice(partition)
-        chash = __import__("graphed_histogram").content_hash(self.spec)
+        # Key the evaluator by the node's recorded identity (full-payload hash), NOT a re-hash of
+        # the bare spec: the reduced IR's External node is addressed by the discriminated hash.
         evaluator = FillEvaluator(spec=self.spec, n_axes=1, has_weight=False, has_sample=False)
         (filled,) = evaluate_ir(
-            self.ir, _bare_backend(), {"events": chunk}, externals={chash: evaluator}
+            self.ir, _bare_backend(), {"events": chunk}, externals={self.chash: evaluator}
         )
         return filled
 
@@ -242,8 +244,12 @@ def rerun_preserved(
 
     ir, stats = optimized_ir(bundle)
     entry = next(e for e in bundle.manifest["externals"] if e["kind"] == "histogram")
-    spec = bundle.store.get(entry["store"]).decode()  # the preserved PAYLOAD: the canonical spec
-    process = _RetargetFill(ir=ir, spec=spec)
+    # The preserved payload is the fill's discriminated content-address witness: the canonical
+    # spec followed by a "\x00"-joined fill-mode suffix (here "unweighted"; graphed-preserve
+    # externals/histogram_external._canonical_payload). The bare spec (before the suffix) rebuilds
+    # the zero histogram / FillEvaluator; the node's identity is the hash of the WHOLE payload.
+    spec = bundle.store.get(entry["store"]).decode().split("\x00", 1)[0]
+    process = _RetargetFill(ir=ir, spec=spec, chash=entry["content_hash"])
     parts = benchmark.entry_target_partitions(files, chunksize)
     plan = Plan(
         process=process, combine=_hist_sum, empty=_ZeroOf(spec),

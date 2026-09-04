@@ -29,3 +29,10 @@ conda activate root-bench
 $CXX -O3 $(root-config --cflags --libs) root_bench.cxx -o root_bench
 ```
 (compilation took 10s)
+
+For the graphed benchmarks (`graphed-adl-benchmarks.ipynb`): install the editable graphed stack
+(the `uproot`, `graphed`, `graphed-executors`, `graphed-histogram`, and `hist` forks, plus
+`vector`), then the plotting extras the notebook draws with:
+```bash
+pip install matplotlib mplhep   # mplhep backs hist.plot1d; without it the plot cells raise ModuleNotFoundError
+```
