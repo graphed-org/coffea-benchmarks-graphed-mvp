@@ -76,11 +76,19 @@ def btag_correctionset() -> bytes:
     pt = [20, 40, 70, 150, 1000]
     disc = [0.0, 0.5, 1.0]
 
-    def base(flavour: int, a: float, x: float) -> float:
-        return 0.98 + 0.02 * x - 0.01 * min(a, 2.5) + (0.02 if flavour == 5 else 0.0)
+    def base(flavour: int, a: float, x: float, p: float) -> float:
+        # pT-dependent, like the real deepJet_shape: the SF rises ~3% from 20 GeV to the plateau.
+        # This is what makes a JES shift PROPAGATE into the b-tag weight.
+        return (
+            0.98
+            + 0.02 * x
+            - 0.01 * min(a, 2.5)
+            + (0.02 if flavour == 5 else 0.0)
+            + 0.03 * min(p / 100.0, 1.0)
+        )
 
-    def sf(flavour: int, a: float, x: float, systematic: str) -> float:
-        v = base(flavour, a, x)
+    def sf(flavour: int, a: float, x: float, p: float, systematic: str) -> float:
+        v = base(flavour, a, x, p)
         if systematic == "up_hf" and flavour == 5:
             v *= 1.05
         if systematic == "down_hf" and flavour == 5:
@@ -93,9 +101,9 @@ def btag_correctionset() -> bytes:
 
     def binning(systematic: str, flavour: int) -> cs.MultiBinning:
         content = [
-            round(sf(flavour, a, x, systematic), 5)
+            round(sf(flavour, a, x, p, systematic), 5)
             for a in _centers(abseta)
-            for _p in _centers(pt)
+            for p in _centers(pt)
             for x in _centers(disc)
         ]
         return cs.MultiBinning(
