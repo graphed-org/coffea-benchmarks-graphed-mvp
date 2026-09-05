@@ -16,9 +16,12 @@ env:
   # (graphed.core / graphed.awkward / graphed.checkpoint / graphed.preserve). The [preserve] extra
   # pulls awkward + correctionlib + onnx for the bundle tests; checkpoint's cloudpickle is a base dep.
   GRAPHED: "graphed[awkward,numpy,preserve] @ git+https://github.com/graphed-org/graphed@main"
-  # still-separate packages (each depends on the consolidated graphed):
-  EXEC: "graphed-executors"
-  HISTO: "graphed-histogram"
+  # still-separate packages (each depends on the consolidated graphed): install from git main, NOT
+  # PyPI — GRAPHED above tracks git main, and the released PyPI siblings lag it, so a PyPI EXEC/HISTO
+  # is built against an older graphed and skews (e.g. m52 landed on graphed main ahead of any release).
+  # Repin to PyPI once the stack ships a coordinated release.
+  EXEC: "graphed-executors @ git+https://github.com/graphed-org/graphed-executors@main"
+  HISTO: "graphed-histogram @ git+https://github.com/graphed-org/graphed-histogram@main"
   UPROOT: "uproot @ git+https://github.com/graphed-org/uproot5-graphed-mvp@graphed-mvp"
   HIST: "hist @ git+https://github.com/graphed-org/hist-graphed-mvp@graphed-mvp"
 
