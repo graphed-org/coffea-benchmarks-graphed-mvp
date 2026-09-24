@@ -1,6 +1,6 @@
 """graphed-debug over the real skim: errors point at the USER's code, across process boundaries.
 
-Pins (plan A.3 #8): a record-time type error carries the user's source line; a runtime,
+Pins (plan A.3 #8): a typo'd field fails at record time; a runtime,
 DATA-DEPENDENT failure raised INSIDE a spawned worker reaches the driver as a real StageError
 (never an opaque string) — with the failing op, the user's analysis frames (the buggy line in
 debugging.py), the input forms, WHICH partition failed, and the underlying cause — and
@@ -22,17 +22,15 @@ import graphed.debug as gd  # noqa: E402
 import debugging  # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WHERE = [os.path.join(HERE, "data", "Run2012B_SingleMu_50k.root") + ":Events"]
+WHERE = [os.path.join(HERE, "data", "Run2012B_SingleMu_50k.root")]
 
 
-def test_record_time_errors_carry_the_users_line():
-    import uproot
-    from graphed import GraphedTypeError
+def test_record_time_errors_are_raised_before_any_data_is_read():
+    import adl_graphed as adl
 
-    g = uproot.graphed(WHERE, library="ak")
-    with pytest.raises(GraphedTypeError) as exc:
-        _ = g.Jet_ptt  # a typo'd branch: caught AT RECORD TIME, before any data is read
-    assert "test_debugging.py" in str(exc.value)  # ... pointing at THIS file's line
+    events = adl.events(WHERE)
+    with pytest.raises(AttributeError, match="ptt"):
+        _ = events.Jet.ptt  # a typo'd field: caught AT RECORD TIME, before any data is read
 
 
 def test_worker_stage_errors_cross_the_process_boundary_intact():
@@ -62,10 +60,10 @@ def test_the_user_traceback_survives_higher_optimization_levels():
     from graphed import Session
     from graphed.awkward import AwkwardBackend, from_awkward
 
-    raw = uproot.open(WHERE[0]).arrays(["Jet_pt"], entry_stop=1000)
+    raw = uproot.open(WHERE[0])["Events"].arrays(["Jet_pt"], entry_stop=1000)
     s = Session(AwkwardBackend())
     g = from_awkward(s, "events", ak.Array({"Jet_pt": raw.Jet_pt}))
-    bad = debugging.faulty_q4(g)
+    bad = debugging.faulty_q4(g.Jet_pt)
 
     lowered0 = gd.lower(s, bad, opt_level=0)
     lowered1 = gd.lower(s, bad, opt_level=1)

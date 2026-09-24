@@ -1,7 +1,6 @@
 """The P2 harness over the committed skim (CI-safe; the 16 GB sweep is local-only).
 
-Pins: entry-target partitions tile each file exactly at the requested chunk size; a measured
-benchmark point reports complete, sane metrics (entries == the skim, chunks == the ceiling,
+Pins: a measured benchmark point reports complete, sane metrics (entries == the skim, chunks == the ceiling,
 bytes read positive and bounded by the file size — reads are PROJECTED); the histograms it
 produces agree with the acceptance reference; parallel points run through a process pool.
 """
@@ -18,29 +17,15 @@ import pytest
 pytest.importorskip("graphed.awkward")
 pytest.importorskip("graphed_histogram")
 pytest.importorskip("hist.graphed")
-pytest.importorskip("vector")
+pytest.importorskip("coffea.nanoevents")
 
 import benchmark  # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIM = os.path.join(HERE, "data", "Run2012B_SingleMu_50k.root")
-WHERE = [SKIM + ":Events"]
+WHERE = [SKIM]
 REF = json.load(open(os.path.join(HERE, "data", "reference_counts.json")))
 N = 50_000
-
-
-def test_entry_target_partitions_tile_exactly():
-    parts = benchmark.entry_target_partitions(WHERE, 2**13)
-    assert len(parts) == math.ceil(N / 2**13)
-    assert parts[0].entry_start == 0
-    assert parts[-1].entry_stop == N
-    spans = [(p.entry_start, p.entry_stop) for p in parts]
-    assert all(
-        b == c for (_, b), (c, _) in zip(spans, spans[1:])
-    )  # contiguous, gapless
-    assert all(
-        b - a == 2**13 for a, b in spans[:-1]
-    )  # full-size chunks except the tail
 
 
 def test_benchmark_point_metrics_and_counts():
@@ -86,19 +71,16 @@ def test_parallel_point_through_a_persistent_pool():
 
 
 def test_combined_plan_matches_per_query_plans():
-    """All eight queries in ONE compiled plan (one data pass) reproduce each per-query plan's
-    histograms exactly — the speedup benchmark times this combined plan so that both runners
-    open each file exactly once (resource symmetry)."""
-    import numpy as np
+    """All eight queries in ONE plan (one data pass) reproduce each per-query plan's histograms
+    exactly — the speedup benchmark times this combined plan so that both runners open each
+    file exactly once (resource symmetry)."""
     from graphed.core.execution import SequentialRunner
 
-    plan, labels = benchmark.build_combined_plan(WHERE, 25000)
-    combined = SequentialRunner().run(plan).value
-    assert combined.entries == 50000
+    import adl_graphed as adl
+
+    combined = SequentialRunner().run(adl.query_plan(list(adl.QUERIES), WHERE, steps_per_file=2)).value
     for qname in ("q1", "q5", "q7"):
-        per_query, q_labels = benchmark.build_plan(qname, WHERE, 25000)
-        got = combined.hists[labels.index(qname)]
-        want = SequentialRunner().run(per_query).value.hists[q_labels.index(qname)]
+        per_query = SequentialRunner().run(adl.query_plan(qname, WHERE, steps_per_file=2)).value
         assert np.array_equal(
-            np.asarray(got.values(flow=True)), np.asarray(want.values(flow=True))
+            np.asarray(combined[qname].values(flow=True)), np.asarray(per_query[qname].values(flow=True))
         )

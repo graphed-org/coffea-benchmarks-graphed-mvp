@@ -1,216 +1,170 @@
-"""The eight ADL benchmark queries on graphed — recorded once, executed partition by partition.
+"""The eight ADL benchmark queries on coffea NanoEvents in graphed mode.
 
-The porting idiom (no schema layer): each query zips exactly the collections it needs from the
-NanoAOD branches with ``gak.zip(..., with_name="Momentum4D")`` and leans on vector behaviors for
-kinematics; every query ends in a deferred ``hist.graphed`` fill whose plan any R7 executor
-aggregates. Vector behaviors reach process workers by IMPORT REF (``adl_graphed:make_backend``)
-— never by pickling the behavior dict.
-
-Δ-quantities (delta_phi, delta_r) are written as explicit formulas.
+Each query is the original coffea processor's ``process`` body (``coffea-adl-benchmarks.py``) in
+the spelling a deferred array needs, as with dask: ``gak`` for ``ak``, ``hist.graphed`` for
+``hist``, and ``gak.with_field`` where the original assigns a field. Nothing is read until a
+plan runs.
 """
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
-import numpy as np
-
+import graphed_histogram as gh
+import hist
 import hist.graphed as hg
+import numpy as np
+from coffea.nanoevents import NanoAODSchema, NanoEventsFactory
 from graphed.awkward import gak
+from graphed.core.execution import SequentialRunner
+
+NanoAODSchema.warn_missing_crossrefs = False  # the opendata files lack some optional columns
+NanoAODSchema.error_missing_event_ids = False  # the committed skim drops run/lumi/event
+warnings.filterwarnings("ignore", message="Missing event_ids", category=RuntimeWarning)
 
 
-def make_backend() -> Any:
-    """Worker evaluation backend (import-ref target): vector behaviors registered."""
-    import vector
-    from graphed.awkward import AwkwardBackend
-
-    vector.register_awkward()
-    return AwkwardBackend(behavior=vector.backends.awkward.behavior)
-
-
-def behavior() -> Any:
-    import vector
-
-    vector.register_awkward()
-    return vector.backends.awkward.behavior
+def events(files: Any, **uproot_options: Any) -> Any:
+    """Deferred NanoEvents over a path, a list of paths, or a ``{path: tree}`` dict."""
+    if isinstance(files, str):
+        files = [files]
+    if not isinstance(files, dict):
+        files = dict.fromkeys(files, "Events")
+    return NanoEventsFactory.from_root(
+        files, schemaclass=NanoAODSchema, mode="graphed", uproot_options=uproot_options
+    ).events()
 
 
-# ---- kinematic helpers (recorded ops; identical formulas in the eager reference) -----------------
-def delta_phi(a: Any, b: Any) -> Any:
-    return (a - b + np.pi) % (2 * np.pi) - np.pi
-
-
-def delta_r(eta1: Any, phi1: Any, eta2: Any, phi2: Any) -> Any:
-    return np.hypot(eta1 - eta2, delta_phi(phi1, phi2))
-
-
-# ---- per-query collection zips (exactly the columns each query needs) -----------------------------
-def muons(g: Any) -> Any:
-    return gak.zip(
-        {"pt": g.Muon_pt, "eta": g.Muon_eta, "phi": g.Muon_phi,
-         "mass": g.Muon_mass, "charge": g.Muon_charge},
-        with_name="Momentum4D",
-    )
-
-
-def electrons(g: Any) -> Any:
-    return gak.zip(
-        {"pt": g.Electron_pt, "eta": g.Electron_eta, "phi": g.Electron_phi,
-         "mass": g.Electron_mass, "charge": g.Electron_charge},
-        with_name="Momentum4D",
-    )
-
-
-def jets(g: Any, *, btag: bool = False) -> Any:
-    fields = {"pt": g.Jet_pt, "eta": g.Jet_eta, "phi": g.Jet_phi, "mass": g.Jet_mass}
-    if btag:
-        fields["btag"] = g.Jet_btag
-    return gak.zip(fields, with_name="Momentum4D")
-
-
-# ---- the eight queries (each returns staged hist.graphed histograms) ------------------------------
-def q1(g: Any) -> Any:
+def q1(events):
     """MET of all events."""
-    return hg.Hist.new.Reg(100, 0, 200, name="met", label=r"$E_{T}^{miss}$ [GeV]").Double().fill(
-        met=g.MET_pt
+    return hg.Hist.new.Reg(100, 0, 200, name="met", label="$E_{T}^{miss}$ [GeV]").Double().fill(events.MET.pt)
+
+
+def q2(events):
+    """pT of all jets."""
+    return (
+        hg.Hist.new.Reg(100, 0, 200, name="ptj", label="Jet $p_{T}$ [GeV]")
+        .Double()
+        .fill(gak.flatten(events.Jet.pt))
     )
 
 
-def q2(g: Any) -> Any:
-    """pT of all jets (ragged fills flatten)."""
-    return hg.Hist.new.Reg(100, 0, 200, name="ptj", label=r"Jet $p_{T}$ [GeV]").Double().fill(
-        ptj=g.Jet_pt
-    )
-
-
-def q3(g: Any) -> Any:
+def q3(events):
     """pT of jets with |eta| < 1."""
-    sel = g.Jet_pt[abs(g.Jet_eta) < 1.0]
-    return hg.Hist.new.Reg(100, 0, 200, name="ptj", label=r"Jet $p_{T}$ [GeV]").Double().fill(ptj=sel)
-
-
-def q4(g: Any) -> Any:
-    """MET of events with >= 2 jets above 40 GeV."""
-    has2jets = gak.sum(g.Jet_pt > 40.0, axis=1) >= 2
-    return hg.Hist.new.Reg(100, 0, 200, name="met", label=r"$E_{T}^{miss}$ [GeV]").Double().fill(
-        met=g.MET_pt[has2jets]
+    return (
+        hg.Hist.new.Reg(100, 0, 200, name="ptj", label="Jet $p_{T}$ [GeV]")
+        .Double()
+        .fill(gak.flatten(events.Jet[abs(events.Jet.eta) < 1].pt))
     )
 
 
-def q5(g: Any) -> Any:
-    """MET of events with an opposite-charge dimuon pair with 60 < m < 120 GeV."""
-    mu = muons(g)
-    pair = gak.combinations(mu, 2, fields=["mu1", "mu2"])
-    mass = (pair.mu1 + pair.mu2).mass
-    opposite = pair.mu1.charge != pair.mu2.charge
-    good = gak.any((mass > 60.0) & (mass < 120.0) & opposite, axis=1)
-    return hg.Hist.new.Reg(100, 0, 200, name="met", label=r"$E_{T}^{miss}$ [GeV]").Double().fill(
-        met=g.MET_pt[good]
+def q4(events):
+    """MET of events with at least two jets above 40 GeV."""
+    has2jets = gak.sum(events.Jet.pt > 40, axis=1) >= 2
+    return (
+        hg.Hist.new.Reg(100, 0, 200, name="met", label="$E_{T}^{miss}$ [GeV]")
+        .Double()
+        .fill(events[has2jets].MET.pt)
     )
 
 
-def q6(g: Any) -> dict[str, Any]:
-    """The trijet closest to the top mass: its pT and its max b-tag.
-
-    Jets are re-zipped into cartesian components (x, y, z, t) before summing, matching the
-    reference implementation's four-vector arithmetic exactly."""
-    p4j = jets(g, btag=True)
-    jet = gak.zip(
-        {"x": p4j.x, "y": p4j.y, "z": p4j.z, "t": p4j.t, "btag": p4j.btag},
-        with_name="Momentum4D",
+def q5(events):
+    """MET of events with an opposite-charge dimuon pair of mass 60-120 GeV."""
+    mupair = gak.combinations(events.Muon, 2, fields=["mu1", "mu2"])
+    pairmass = (mupair.mu1 + mupair.mu2).mass
+    goodevent = gak.any(
+        (pairmass > 60) & (pairmass < 120) & (mupair.mu1.charge == -mupair.mu2.charge),
+        axis=1,
     )
-    tri = gak.combinations(jet, 3, fields=["j1", "j2", "j3"])
-    p4 = tri.j1 + tri.j2 + tri.j3
-    best = gak.argmin(abs(p4.mass - 172.5), axis=1, keepdims=True)
-    best_pt = gak.flatten(p4.pt[best])
-    max_btag = gak.flatten(
-        np.maximum(tri.j1.btag, np.maximum(tri.j2.btag, tri.j3.btag))[best]
-    )
-    h_pt = hg.Hist.new.Reg(100, 0, 200, name="pt3j", label=r"Trijet $p_{T}$ [GeV]").Double().fill(
-        pt3j=best_pt
-    )
-    h_btag = hg.Hist.new.Reg(100, 0, 1, name="btag", label="Max jet b-tag score").Double().fill(
-        btag=max_btag
-    )
-    return {"trijetpt": h_pt, "maxbtag": h_btag}
-
-
-def q7(g: Any) -> Any:
-    """Scalar sum of jet pT (jets > 30 GeV, not within dR 0.4 of any lepton > 10 GeV)."""
-    jet = jets(g)
-    good_jet_mask = jet.pt > 30.0
-    leptons = gak.concatenate([muons(g), electrons(g)], axis=1)
-    leptons = leptons[leptons.pt > 10.0]
-    pair = gak.cartesian([jet, leptons], nested=True)
-    dr = delta_r(pair["0"].eta, pair["0"].phi, pair["1"].eta, pair["1"].phi)
-    isolated = gak.fill_none(gak.all(dr >= 0.4, axis=2), True)
-    sum_pt = gak.sum(jet.pt[good_jet_mask & isolated], axis=1)
-    return hg.Hist.new.Reg(100, 0, 200, name="sumjetpt", label=r"Jet $\sum p_{T}$ [GeV]").Double().fill(
-        sumjetpt=sum_pt
+    return (
+        hg.Hist.new.Reg(100, 0, 200, name="met", label="$E_{T}^{miss}$ [GeV]")
+        .Double()
+        .fill(events[goodevent].MET.pt)
     )
 
 
-def q8(g: Any) -> Any:
-    """Transverse mass of MET + the leading light lepton outside the best SFOS pair."""
-    mu = muons(g)
-    el = electrons(g)
-    mu = gak.with_field(mu, -13 * mu.charge, "pdgId")
-    el = gak.with_field(el, -11 * el.charge, "pdgId")
-    lep = gak.concatenate([el, mu], axis=1)
+def q6(events):
+    """pT of the trijet closest to the top mass, and the maximum b-tag among its jets."""
+    jets = gak.zip(
+        {k: getattr(events.Jet, k) for k in ["x", "y", "z", "t", "btag"]},
+        with_name="LorentzVector",
+    )
+    trijet = gak.combinations(jets, 3, fields=["j1", "j2", "j3"])
+    trijet = gak.with_field(trijet, trijet.j1 + trijet.j2 + trijet.j3, "p4")
+    trijet = gak.flatten(trijet[gak.singletons(gak.argmin(abs(trijet.p4.mass - 172.5), axis=1))])
+    max_btag = np.maximum(trijet.j1.btag, np.maximum(trijet.j2.btag, trijet.j3.btag))
+    return {
+        "trijetpt": hg.Hist.new.Reg(100, 0, 200, name="pt3j", label="Trijet $p_{T}$ [GeV]")
+        .Double()
+        .fill(trijet.p4.pt),
+        "maxbtag": hg.Hist.new.Reg(100, 0, 1, name="btag", label="Max jet b-tag score")
+        .Double()
+        .fill(max_btag),
+    }
 
-    mask3 = gak.num(lep, axis=1) >= 3
-    lep = lep[mask3]
-    met_pt = g.MET_pt[mask3]
-    met_phi = g.MET_phi[mask3]
 
-    pair = gak.argcombinations(lep, 2, fields=["l1", "l2"])
-    sfos = pair[lep[pair.l1].pdgId == -lep[pair.l2].pdgId]
-    mass = (lep[sfos.l1] + lep[sfos.l2]).mass
-    best = gak.singletons(gak.argmin(abs(mass - 91.2), axis=1))
-    best_pair = sfos[best]
+def q7(events):
+    """Scalar sum of the pT of jets above 30 GeV not within dR 0.4 of a lepton above 10 GeV."""
+    cleanjets = events.Jet[
+        gak.all(events.Jet.metric_table(events.Muon[events.Muon.pt > 10]) >= 0.4, axis=2)
+        & gak.all(events.Jet.metric_table(events.Electron[events.Electron.pt > 10]) >= 0.4, axis=2)
+        & (events.Jet.pt > 30)
+    ]
+    return (
+        hg.Hist.new.Reg(100, 0, 200, name="sumjetpt", label=r"Jet $\sum p_{T}$ [GeV]")
+        .Double()
+        .fill(gak.sum(cleanjets.pt, axis=1))
+    )
 
-    has_pair = gak.num(best_pair, axis=1) > 0
-    lep = lep[has_pair]
-    met_pt = met_pt[has_pair]
-    met_phi = met_phi[has_pair]
-    chosen = gak.firsts(best_pair[has_pair])
 
-    idx = gak.local_index(lep, axis=1)
-    outside = (idx != chosen.l1) & (idx != chosen.l2)
-    others = lep[outside]
-    lead = others[gak.argmax(others.pt, axis=1, keepdims=True)]
-    l3 = gak.firsts(lead)
+def q8(events):
+    """Transverse mass of MET and the leading lepton outside the SFOS pair closest to the Z."""
 
-    mt = np.sqrt(2.0 * l3.pt * met_pt * (1.0 - np.cos(delta_phi(met_phi, l3.phi))))
-    return hg.Hist.new.Reg(100, 0, 200, name="mt", label=r"$\ell$-MET transverse mass [GeV]").Double().fill(
-        mt=mt
+    # Leptons as one record type (concatenating Electron with Muon makes a union, which is slow
+    # and has no delta_phi) kept beside MET: a field assigned onto `events` makes every read
+    # also fetch other collections' counters.
+    def lepton(collection, pdg):
+        fields = {k: getattr(collection, k) for k in ["pt", "eta", "phi", "mass", "charge"]}
+        return gak.zip({**fields, "pdgId": pdg * collection.charge}, with_name="PtEtaPhiMCandidate")
+
+    leptons = gak.concatenate([lepton(events.Electron, -11), lepton(events.Muon, -13)], axis=1)
+    has3 = gak.num(leptons) >= 3
+    leptons, met = leptons[has3], events.MET[has3]
+
+    pair = gak.argcombinations(leptons, 2, fields=["l1", "l2"])
+    pair = pair[(leptons[pair.l1].pdgId == -leptons[pair.l2].pdgId)]
+    pair = pair[gak.singletons(gak.argmin(abs((leptons[pair.l1] + leptons[pair.l2]).mass - 91.2), axis=1))]
+    haspair = gak.num(pair) > 0
+    leptons, met, pair = leptons[haspair], met[haspair], pair[haspair][:, 0]
+
+    l3 = gak.local_index(leptons)
+    l3 = l3[(l3 != pair.l1) & (l3 != pair.l2)]
+    l3 = l3[gak.argmax(leptons[l3].pt, axis=1, keepdims=True)]
+    l3 = leptons[l3][:, 0]
+
+    mt = np.sqrt(2 * l3.pt * met.pt * (1 - np.cos(met.delta_phi(l3))))
+    return (
+        hg.Hist.new.Reg(100, 0, 200, name="mt", label=r"$\ell$-MET transverse mass [GeV]").Double().fill(mt)
     )
 
 
 QUERIES = {"q1": q1, "q2": q2, "q3": q3, "q4": q4, "q5": q5, "q6": q6, "q7": q7, "q8": q8}
 
 
-# ---- the runner (compile once; any R7 executor aggregates) ----------------------------------------
-def run_query(name: str, where: str, *, steps_per_file: int = 5, executor: Any | None = None) -> dict[str, Any]:
-    """Record query ``name`` over ``where`` (a ``path:tree`` string) and aggregate its
-    histogram(s). Returns ``{histogram_name: concrete hist.Hist}``."""
-    import uproot
-    from graphed.core.execution import SequentialRunner
-    from graphed_histogram import plan as plan_group
+def query_plan(
+    names: Any, files: Any, *, steps_per_file: int = 1, partitions: Any = None, **uproot_options: Any
+) -> Any:
+    """ONE plan for every histogram of the named queries (a name or a list): one pass over the data."""
+    ev = events(files, **uproot_options)
+    staged = {}
+    for name in [names] if isinstance(names, str) else names:
+        out = QUERIES[name](ev)
+        staged.update(out if isinstance(out, dict) else {name: out})
+    return gh.plan(staged, steps_per_file=steps_per_file, partitions=partitions)
 
-    g = uproot.graphed(where, library="ak", behavior=behavior())
-    staged = QUERIES[name](g)
-    if not isinstance(staged, dict):
-        staged = {name: staged}
+
+def run_query(name: str, files: Any, *, steps_per_file: int = 1, executor: Any = None) -> dict[str, Any]:
+    """Run query ``name`` and return ``{histogram label: hist.Hist}``."""
     runner = executor if executor is not None else SequentialRunner()
-    # ONE plan for ALL the query's histograms: a shared sub-graph (e.g. the trijet selection feeding
-    # both the pT and b-tag histograms) is read and evaluated ONCE, not once per output histogram —
-    # dask's compute(dict_of_hists) parity. (Was: a separate plan per histogram, re-reading the data.)
-    plan = plan_group(staged, steps_per_file=steps_per_file, backend="adl_graphed:make_backend")
-    return {label: _wrap(h) for label, h in runner.run(plan).value.items()}
-
-
-def _wrap(value: Any) -> Any:
-    import hist as _h
-
-    return _h.Hist(value)
+    value = runner.run(query_plan(name, files, steps_per_file=steps_per_file)).value
+    return {label: hist.Hist(h) for label, h in value.items()}

@@ -48,19 +48,18 @@ def durable_q1_plan(files: list[str], chunksize: int = 2**13) -> Any:
     """q1 as a durable, content-addressed plan: the COMPILED query IR is the plan's identity."""
     from graphed import compile_ir
     from graphed.core import DurablePlan, OpSpec
+    from uproot._graphed import graphed_partitions
 
     import adl_graphed as adl
-    import benchmark
 
-    g = uproot.graphed(files, library="ak", behavior=adl.behavior())
-    (fill,) = adl.QUERIES["q1"](g).fill_nodes()
-    compiled = compile_ir(g.session, fill)
+    events = adl.events(files)
+    (fill,) = adl.q1(events).fill_nodes()
     return DurablePlan(
-        ir=bytes(compiled.ir),
+        ir=bytes(compile_ir(events.session, fill).ir),
         process=OpSpec.from_ref("preservation:q1_chunk"),
         combine=OpSpec.from_ref("preservation:hist_add"),
         empty=OpSpec.from_ref("preservation:hist_empty"),
-        partitions=benchmark.entry_target_partitions(files, chunksize),
+        partitions=graphed_partitions(dict.fromkeys(files, "Events"), step_size=chunksize),
         read_columns=("MET_pt",),
     )
 
@@ -232,15 +231,11 @@ def _hist_sum(a: Any, b: Any) -> Any:
     return a + b
 
 
-def rerun_preserved(
-    bundle: Any, files: list[str], *, executor: Any = None, chunksize: int = 2**13
-) -> tuple[Any, dict[str, Any]]:
-    """Re-target the preserved analysis at NEW input files and run its OPTIMIZED graph partition
-    by partition through any R7 executor. Returns (the aggregated histogram, optimization stats)."""
-    from graphed.core.execution import SequentialRunner
+def retarget_plan(bundle: Any, files: list[str], *, chunksize: int = 2**13) -> tuple[Any, dict[str, Any]]:
+    """The preserved analysis's OPTIMIZED graph as a plan over NEW input files: (plan, optimization
+    stats). Hand it to any runner yourself, e.g. to attach a monitor."""
     from graphed.core.execution import Plan, Task
-
-    import benchmark
+    from uproot._graphed import graphed_partitions
 
     ir, stats = optimized_ir(bundle)
     entry = next(e for e in bundle.manifest["externals"] if e["kind"] == "histogram")
@@ -250,10 +245,21 @@ def rerun_preserved(
     # the zero histogram / FillEvaluator; the node's identity is the hash of the WHOLE payload.
     spec = bundle.store.get(entry["store"]).decode().split("\x00", 1)[0]
     process = _RetargetFill(ir=ir, spec=spec, chash=entry["content_hash"])
-    parts = benchmark.entry_target_partitions(files, chunksize)
+    parts = graphed_partitions(dict.fromkeys(files, "Events"), step_size=chunksize)
     plan = Plan(
         process=process, combine=_hist_sum, empty=_ZeroOf(spec),
         tasks=tuple(Task(i, p) for i, p in enumerate(parts)),
     )
+    return plan, stats
+
+
+def rerun_preserved(
+    bundle: Any, files: list[str], *, executor: Any = None, chunksize: int = 2**13
+) -> tuple[Any, dict[str, Any]]:
+    """Re-target the preserved analysis at NEW input files and run its OPTIMIZED graph partition
+    by partition through any R7 executor. Returns (the aggregated histogram, optimization stats)."""
+    from graphed.core.execution import SequentialRunner
+
+    plan, stats = retarget_plan(bundle, files, chunksize=chunksize)
     runner = executor if executor is not None else SequentialRunner()
     return runner.run(plan).value, stats

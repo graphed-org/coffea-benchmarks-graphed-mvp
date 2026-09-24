@@ -7,15 +7,14 @@ near-equidistant trijet candidates (q6) — so CI regenerates the reference on i
 before comparing; the committed JSON is the macOS snapshot. Every bin including flow must match
 exactly: same per-event float operations -> same bin -> identical integer counts, independent
 of partitioning. One query is additionally aggregated through a SPAWNED
-process pool (vector behaviors by import ref) and pinned identical, and recording is pinned
-deterministic (byte-identical serialized IR across two recordings).
+process pool and pinned identical, and recording is pinned deterministic (byte-identical
+serialized IR across two recordings). The queries run on coffea NanoEvents in graphed mode.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sys
 
 import numpy as np
 import pytest
@@ -23,12 +22,12 @@ import pytest
 pytest.importorskip("graphed.awkward")
 pytest.importorskip("graphed_histogram")
 pytest.importorskip("hist.graphed")
-pytest.importorskip("vector")
+pytest.importorskip("coffea.nanoevents")
 
 import adl_graphed as adl  # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WHERE = os.path.join(HERE, "data", "Run2012B_SingleMu_50k.root") + ":Events"
+WHERE = os.path.join(HERE, "data", "Run2012B_SingleMu_50k.root")
 REF = json.load(open(os.path.join(HERE, "data", "reference_counts.json")))
 
 
@@ -63,18 +62,14 @@ def test_partitioning_does_not_change_any_count():
     assert np.array_equal(a.values(flow=True), b.values(flow=True))
 
 
-def test_process_pool_aggregation_matches_with_behaviors_by_import_ref():
+def test_process_pool_aggregation_matches_the_sequential_run():
     # pinned against the SEQUENTIAL run (same platform by construction): the pool must change
-    # nothing, with vector behaviors reaching workers by import ref
+    # nothing, with coffea's behaviors reaching workers through the plan's backend class
     pytest.importorskip("graphed_executors.local")
     from graphed_executors.local import ProcessExecutor
 
     sequential = adl.run_query("q6", WHERE, steps_per_file=3)
-    sys.path.insert(0, HERE)  # spawn children inherit sys.path; adl_graphed resolves in workers
-    try:
-        pooled = adl.run_query("q6", WHERE, steps_per_file=3, executor=ProcessExecutor(max_workers=2))
-    finally:
-        sys.path.remove(HERE)
+    pooled = adl.run_query("q6", WHERE, steps_per_file=3, executor=ProcessExecutor(max_workers=2))
     for label, h in pooled.items():
         assert np.array_equal(
             np.asarray(h.values(flow=True)), np.asarray(sequential[label].values(flow=True))
@@ -82,23 +77,14 @@ def test_process_pool_aggregation_matches_with_behaviors_by_import_ref():
 
 
 def test_recording_is_deterministic():
-    import uproot
-
     def record_once() -> bytes:
-        g = uproot.graphed(WHERE, library="ak", behavior=adl.behavior())
-        h = adl.QUERIES["q8"](g)
-        (node,) = h.fill_nodes()
-        return g.session.serialized_ir(node)
+        events = adl.events(WHERE)
+        (node,) = adl.q8(events).fill_nodes()
+        return events.session.serialized_ir(node)
 
     assert record_once() == record_once()
 
 
 def test_queries_read_only_what_they_touch():
-    # project the FILL EXPRESSION (an External fill node is opaque to projection, by design)
-    import uproot
-    from graphed.awkward import gak
-
-    g = uproot.graphed(WHERE, library="ak", behavior=adl.behavior())
-    expr = g.MET_pt[gak.sum(g.Jet_pt > 40.0, axis=1) >= 2]  # q4's fill input, verbatim
-    cols = uproot.necessary_columns(expr)["Events"]
-    assert cols == frozenset({"Jet_pt", "MET_pt"})  # q4 touches nothing else
+    # the jet counter gives the jagged structure; q4 touches nothing else
+    assert set(adl.query_plan("q4", WHERE).process.columns) == {"Jet_pt", "MET_pt", "nJet"}

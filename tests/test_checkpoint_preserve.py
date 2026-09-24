@@ -19,14 +19,14 @@ import pytest
 pytest.importorskip("graphed.awkward")
 pytest.importorskip("graphed.checkpoint")
 pytest.importorskip("graphed.preserve")
-pytest.importorskip("vector")
+pytest.importorskip("coffea.nanoevents")
 
 import benchmark  # noqa: E402
 import preservation  # noqa: E402
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIM = os.path.join(HERE, "data", "Run2012B_SingleMu_50k.root")
-WHERE = [SKIM + ":Events"]
+WHERE = [SKIM]
 REF = json.load(open(os.path.join(HERE, "data", "reference_counts.json")))
 N, CHUNK = 50_000, 2**13
 
@@ -117,7 +117,7 @@ def test_rerun_of_the_preserved_analysis_optimizes_retargets_and_parallelizes(tm
     retarget = tmp_path / "Run2012B_SingleMu_50k_retarget.root"
     shutil.copy(SKIM, retarget)
     rerun, _ = preservation.rerun_preserved(
-        bundle, [str(retarget) + ":Events"], executor=ProcessExecutor(max_workers=2)
+        bundle, [str(retarget)], executor=ProcessExecutor(max_workers=2)
     )
     assert np.array_equal(
         np.asarray(rerun.values(flow=True)), np.asarray(reproduce(bundle).values(flow=True))

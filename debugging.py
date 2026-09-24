@@ -19,13 +19,13 @@ import numpy as np
 import uproot
 
 
-def faulty_q4(g: Any) -> Any:
-    """A buggy take on q4's jet handling: rebuild the jagged jets from flat pt — with the
-    counts off by one. Records cleanly; fails on real data."""
+def faulty_q4(jet_pt: Any) -> Any:
+    """A buggy take on q4's jet handling: rebuild the jagged jet pT from its flat values — with
+    the counts off by one. Records cleanly; fails on real data."""
     from graphed.awkward import gak
 
-    flat_pt = gak.flatten(g.Jet_pt, axis=1)
-    counts = gak.num(g.Jet_pt, axis=1) + 1  # BUG: off-by-one counts
+    flat_pt = gak.flatten(jet_pt, axis=1)
+    counts = gak.num(jet_pt, axis=1) + 1  # BUG: off-by-one counts
     rebuilt = gak.unflatten(flat_pt, counts, axis=0)  # <-- graphed-debug points HERE
     return gak.sum(rebuilt, axis=1)
 
@@ -44,7 +44,7 @@ def run_faulty_chunk(partition: Any, resources: Any) -> Any:
     )
     s = Session(AwkwardBackend())
     g = from_awkward(s, "events", ak.Array({"Jet_pt": raw.Jet_pt}))
-    bad = faulty_q4(g)
+    bad = faulty_q4(g.Jet_pt)
     return gd.run(
         s, bad, opt_level=1,
         partition=f"{partition.uri}@{partition.entry_start}:{partition.entry_stop}",
@@ -62,10 +62,9 @@ def _zero() -> Any:
 def faulty_plan(files: list[str], chunksize: int = 2**14) -> Any:
     """The faulty analysis as a task graph over real partitions (for the process-pool demo)."""
     from graphed.core.execution import Plan, Task
+    from uproot._graphed import graphed_partitions
 
-    import benchmark
-
-    parts = benchmark.entry_target_partitions(files, chunksize)
+    parts = graphed_partitions(dict.fromkeys(files, "Events"), step_size=chunksize)
     return Plan(
         process=run_faulty_chunk, combine=_sum, empty=_zero,
         tasks=tuple(Task(i, p) for i, p in enumerate(parts)),

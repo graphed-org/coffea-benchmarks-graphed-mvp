@@ -30,7 +30,7 @@ def main() -> None:
     ap.add_argument("--out", default="results_local.csv")
     args = ap.parse_args()
 
-    files = [f if ":" in os.path.basename(f) else f + ":Events" for f in args.files]
+    files = args.files
     rows = []
     from graphed_executors.local import ProcessExecutor
 

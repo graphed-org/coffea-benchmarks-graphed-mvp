@@ -22,8 +22,11 @@ env:
   # Repin to PyPI once the stack ships a coordinated release.
   EXEC: "graphed-executors @ git+https://github.com/graphed-org/graphed-executors@main"
   HISTO: "graphed-histogram @ git+https://github.com/graphed-org/graphed-histogram@main"
-  UPROOT: "uproot @ git+https://github.com/graphed-org/uproot5-graphed-mvp@graphed-mvp"
-  HIST: "hist @ git+https://github.com/graphed-org/hist-graphed-mvp@graphed-mvp"
+  # coffea's graphed mode (scikit-hep/coffea#1637, from its fork head) runs the queries; uproot and
+  # hist come from their main branches, which carry the graphed hooks ahead of a release
+  COFFEA: "coffea @ git+https://github.com/graphed-org/coffea-graphed-mvp@b2612ab03932ba61f183eb5f582870109020446b"
+  UPROOT: "uproot @ git+https://github.com/scikit-hep/uproot5@ca3a8a28c0846ea4c6f42452f69e3cce2939bf62"
+  HIST: "hist @ git+https://github.com/scikit-hep/hist@52303af314f39d8e30b77668babd42519f6a0f3e"
 
 jobs:
   tests:
@@ -40,15 +43,14 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install the graphed stack + the reader/hist forks
+      - name: Install the graphed stack + coffea, uproot and hist
         run: |
           python -m pip install --upgrade pip
           python -m pip install "${{ env.GRAPHED }}" "${{ env.EXEC }}" "${{ env.HISTO }}" \
-            "${{ env.UPROOT }}" "${{ env.HIST }}"
+            "${{ env.COFFEA }}" "${{ env.HIST }}"
           # pyyaml: a recent coffea's nanoevents edm4hep schema imports `yaml` but doesn't pin it
-          python -m pip install pytest vector coffea pyyaml
-          # coffea's resolver pulls PyPI uproot OVER the fork (the same trap hit locally):
-          # the fork must win, and it satisfies coffea (uproot 5.x + the graphed additions)
+          python -m pip install pytest pyyaml
+          # last and without dependencies: coffea's resolver would otherwise pick a released uproot
           python -m pip install --force-reinstall --no-deps "${{ env.UPROOT }}"
       - name: Generate the coffea reference ON THIS PLATFORM
         # libm ULP differences across platforms can flip argmin picks between near-equidistant
