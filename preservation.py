@@ -111,7 +111,7 @@ def record_q5(events: Any) -> tuple[Any, Any]:
     from graphed.awkward import AwkwardBackend, from_awkward, gak
 
     s = Session(AwkwardBackend())
-    g = from_awkward(s, "events", events)
+    g = from_awkward("events", events, session=s)
     mu = g.Muon
     pair = gak.combinations(mu, 2, fields=["mu1", "mu2"])
     mass = _pair_mass(pair.mu1, pair.mu2)

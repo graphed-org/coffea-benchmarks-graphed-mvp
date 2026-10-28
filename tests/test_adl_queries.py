@@ -46,9 +46,9 @@ def test_query_parallel_matches_the_reference_approximately(qname):
     """Every query through a SPAWNED process pool (>=2 workers). Exactness is the SEQUENTIAL
     tier's claim; here rounding-level agreement suffices (combine-tree float effects allowed)."""
     pytest.importorskip("graphed_executors.local")
-    from graphed_executors.local import ProcessExecutor
+    from graphed_executors.local import ProcessPoolExecutor
 
-    out = adl.run_query(qname, WHERE, steps_per_file=8, executor=ProcessExecutor(max_workers=2))
+    out = adl.run_query(qname, WHERE, steps_per_file=8, executor=ProcessPoolExecutor(max_workers=2))
     for label, h in out.items():
         got = np.asarray(h.values(flow=True))
         want = np.asarray(REF[qname][label])
@@ -66,10 +66,10 @@ def test_process_pool_aggregation_matches_the_sequential_run():
     # pinned against the SEQUENTIAL run (same platform by construction): the pool must change
     # nothing, with coffea's behaviors reaching workers through the plan's backend class
     pytest.importorskip("graphed_executors.local")
-    from graphed_executors.local import ProcessExecutor
+    from graphed_executors.local import ProcessPoolExecutor
 
     sequential = adl.run_query("q6", WHERE, steps_per_file=3)
-    pooled = adl.run_query("q6", WHERE, steps_per_file=3, executor=ProcessExecutor(max_workers=2))
+    pooled = adl.run_query("q6", WHERE, steps_per_file=3, executor=ProcessPoolExecutor(max_workers=2))
     for label, h in pooled.items():
         assert np.array_equal(
             np.asarray(h.values(flow=True)), np.asarray(sequential[label].values(flow=True))

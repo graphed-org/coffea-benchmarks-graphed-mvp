@@ -32,12 +32,12 @@ def main() -> None:
 
     files = args.files
     rows = []
-    from graphed_executors.local import ProcessExecutor
+    from graphed_executors.local import ProcessPoolExecutor
 
     for nworkers in args.workers:
         executor = None
         if nworkers > 1:
-            executor = ProcessExecutor(max_workers=nworkers, persistent=True)
+            executor = ProcessPoolExecutor(max_workers=nworkers, persistent=True)
         try:
             for chunksize in args.chunksizes:
                 for query in args.queries:
