@@ -34,11 +34,11 @@ def test_record_time_errors_are_raised_before_any_data_is_read():
 
 
 def test_worker_stage_errors_cross_the_process_boundary_intact():
-    from graphed_executors.local import ProcessExecutor
+    from graphed_executors.local import ProcessPoolExecutor
 
     plan = debugging.faulty_plan(WHERE, chunksize=2**14)
     with pytest.raises(gd.StageError) as exc:  # a REAL StageError, re-raised by the driver
-        ProcessExecutor(max_workers=2).run(plan)
+        ProcessPoolExecutor(max_workers=2).run(plan)
     err = exc.value
     assert err.op == "ak.unflatten"
     assert err.cause_type == "ValueError"
@@ -62,7 +62,7 @@ def test_the_user_traceback_survives_higher_optimization_levels():
 
     raw = uproot.open(WHERE[0])["Events"].arrays(["Jet_pt"], entry_stop=1000)
     s = Session(AwkwardBackend())
-    g = from_awkward(s, "events", ak.Array({"Jet_pt": raw.Jet_pt}))
+    g = from_awkward("events", ak.Array({"Jet_pt": raw.Jet_pt}), session=s)
     bad = debugging.faulty_q4(g.Jet_pt)
 
     lowered0 = gd.lower(s, bad, opt_level=0)

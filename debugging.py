@@ -43,7 +43,7 @@ def run_faulty_chunk(partition: Any, resources: Any) -> Any:
         ["Jet_pt"], entry_start=partition.entry_start, entry_stop=partition.entry_stop
     )
     s = Session(AwkwardBackend())
-    g = from_awkward(s, "events", ak.Array({"Jet_pt": raw.Jet_pt}))
+    g = from_awkward("events", ak.Array({"Jet_pt": raw.Jet_pt}), session=s)
     bad = faulty_q4(g.Jet_pt)
     return gd.run(
         s, bad, opt_level=1,
