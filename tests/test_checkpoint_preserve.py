@@ -75,7 +75,7 @@ def test_a_real_task_failure_resumes_on_the_same_store(tmp_path, monkeypatch):
     from graphed.core.execution import SequentialRunner
 
     monkeypatch.setattr(preservation, "CRASH_MARKER", tmp_path / "marker")
-    plan = preservation.q1_hist([WHERE])
+    plan = preservation.q1_hist(WHERE)
     root = tmp_path / "store"
 
     preservation.CRASH_MARKER.touch()
