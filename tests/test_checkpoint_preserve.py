@@ -68,6 +68,26 @@ def test_crashed_run_resumes_bit_for_bit(tmp_path):
     assert np.array_equal(np.asarray(res.value, dtype=float), _q1_reference())
 
 
+def test_a_real_task_failure_resumes_on_the_same_store(tmp_path, monkeypatch):
+    import graphed.errors
+    import graphed_histogram as gh
+    from graphed.checkpoint import resumable
+    from graphed.core.execution import SequentialRunner
+
+    monkeypatch.setattr(preservation, "CRASH_MARKER", tmp_path / "marker")
+    plan = preservation.q1_hist([WHERE])
+    root = tmp_path / "store"
+
+    preservation.CRASH_MARKER.touch()
+    with pytest.raises(graphed.errors.StageError, match="the node died"):
+        SequentialRunner().run(resumable(plan, str(root)))
+    preservation.CRASH_MARKER.unlink()
+
+    again = resumable(plan, str(root))
+    assert again.process.reused == 3
+    assert gh.unpack(SequentialRunner().run(again).value)["h"].sum() == 49994
+
+
 def test_preserved_q5_bundle_inspects_and_reproduces(tmp_path):
     import boost_histogram as bh
     from graphed.preserve import inspect as inspect_bundle

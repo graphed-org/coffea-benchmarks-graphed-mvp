@@ -19,6 +19,7 @@ Two durability layers, demonstrated on the committed skim:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -62,6 +63,31 @@ def durable_q1_plan(files: list[str], chunksize: int = 2**13) -> Any:
         partitions=graphed_partitions(dict.fromkeys(files, "Events"), step_size=chunksize),
         read_columns=("MET_pt",),
     )
+
+
+CRASH_MARKER = Path("data/_crash_marker")
+
+
+def crash_midway(met: Any) -> Any:
+    """Pass ``met`` through; while the marker file exists, raise on the fourth chunk."""
+    if CRASH_MARKER.exists():
+        if CRASH_MARKER.stat().st_size >= 3:
+            raise RuntimeError("the node died")
+        with CRASH_MARKER.open("a") as marker:
+            marker.write("x")
+    return met
+
+
+def q1_hist(files: list[str]) -> Any:
+    """q1 with :func:`crash_midway` in its path, so a real task can fail mid-run."""
+    import graphed_histogram as gh
+    import hist.graphed as hg
+
+    import adl_graphed as adl
+
+    met = adl.events(files).MET.pt.map(crash_midway, name="crash_midway")
+    h = hg.Hist.new.Reg(100, 0, 200, name="met").Double().fill(met)
+    return gh.plan({"h": h}, steps_per_file=7, backend="graphed.awkward:AwkwardBackend")
 
 
 # ---- preservation glue ----------------------------------------------------------------------------
