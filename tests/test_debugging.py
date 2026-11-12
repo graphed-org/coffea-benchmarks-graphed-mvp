@@ -38,7 +38,7 @@ def test_worker_stage_errors_cross_the_process_boundary_intact():
 
     plan = debugging.faulty_plan(WHERE, chunksize=2**14)
     with pytest.raises(gd.StageError) as exc:  # a REAL StageError, re-raised by the driver
-        ProcessPoolExecutor(max_workers=2).run(plan)
+        ProcessPoolExecutor(workers=2).run(plan)
     err = exc.value
     assert err.op == "ak.unflatten"
     assert err.cause_type == "ValueError"
@@ -76,7 +76,7 @@ def test_the_user_traceback_survives_higher_optimization_levels():
     errors = {}
     for lvl in (0, 1):
         with pytest.raises(gd.StageError) as exc:
-            gd.run(s, bad, opt_level=lvl, partition=f"lvl{lvl}")
+            gd.run(s, bad, opt_level=lvl, label=f"lvl{lvl}")
         errors[lvl] = exc.value
     assert errors[0].opt_level == 0 and errors[1].opt_level == 1
     for err in errors.values():

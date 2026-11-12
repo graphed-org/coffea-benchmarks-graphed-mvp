@@ -47,7 +47,7 @@ def run_faulty_chunk(partition: Any, resources: Any) -> Any:
     bad = faulty_q4(g.Jet_pt)
     return gd.run(
         s, bad, opt_level=1,
-        partition=f"{partition.uri}@{partition.entry_start}:{partition.entry_stop}",
+        label=f"{partition.uri}@{partition.entry_start}:{partition.entry_stop}",
     )
 
 

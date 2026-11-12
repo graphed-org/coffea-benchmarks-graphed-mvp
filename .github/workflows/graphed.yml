@@ -15,18 +15,13 @@ env:
   # graphed core/frontend/numpy/awkward/debug/checkpoint/preserve are now ONE consolidated package
   # (graphed.core / graphed.awkward / graphed.checkpoint / graphed.preserve). The [preserve] extra
   # pulls awkward + correctionlib + onnx for the bundle tests; checkpoint's cloudpickle is a base dep.
-  GRAPHED: "graphed[awkward,numpy,preserve] @ git+https://github.com/graphed-org/graphed@main"
-  # still-separate packages (each depends on the consolidated graphed): install from git main, NOT
-  # PyPI — GRAPHED above tracks git main, and the released PyPI siblings lag it, so a PyPI EXEC/HISTO
-  # is built against an older graphed and skews (e.g. m52 landed on graphed main ahead of any release).
-  # Repin to PyPI once the stack ships a coordinated release.
-  EXEC: "graphed-executors @ git+https://github.com/graphed-org/graphed-executors@main"
-  HISTO: "graphed-histogram @ git+https://github.com/graphed-org/graphed-histogram@main"
-  # coffea's graphed mode (scikit-hep/coffea#1637, from its fork head) runs the queries; uproot and
-  # hist come from their main branches, which carry the graphed hooks ahead of a release
-  COFFEA: "coffea @ git+https://github.com/graphed-org/coffea-graphed-mvp@b2612ab03932ba61f183eb5f582870109020446b"
-  UPROOT: "uproot @ git+https://github.com/scikit-hep/uproot5@ca3a8a28c0846ea4c6f42452f69e3cce2939bf62"
-  HIST: "hist @ git+https://github.com/scikit-hep/hist@52303af314f39d8e30b77668babd42519f6a0f3e"
+  # the coordinated release series the notebook was last executed on (see install.md)
+  GRAPHED: "graphed[awkward,numpy,preserve]==0.0.11"
+  EXEC: "graphed-executors==0.0.8"
+  HISTO: "graphed-histogram==0.0.8"
+  COFFEA: "coffea==2026.11.0"
+  UPROOT: "uproot==5.7.7"
+  HIST: "hist==2.12.1"
 
 jobs:
   tests:
@@ -42,16 +37,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - uses: dtolnay/rust-toolchain@stable
       - name: Install the graphed stack + coffea, uproot and hist
         run: |
           python -m pip install --upgrade pip
           python -m pip install "${{ env.GRAPHED }}" "${{ env.EXEC }}" "${{ env.HISTO }}" \
-            "${{ env.COFFEA }}" "${{ env.HIST }}"
+            "${{ env.COFFEA }}" "${{ env.UPROOT }}" "${{ env.HIST }}"
           # pyyaml: a recent coffea's nanoevents edm4hep schema imports `yaml` but doesn't pin it
           python -m pip install pytest pyyaml
-          # last and without dependencies: coffea's resolver would otherwise pick a released uproot
-          python -m pip install --force-reinstall --no-deps "${{ env.UPROOT }}"
       - name: Generate the coffea reference ON THIS PLATFORM
         # libm ULP differences across platforms can flip argmin picks between near-equidistant
         # trijet candidates (q6): bit-for-bit is a SAME-PLATFORM claim, so the reference is
