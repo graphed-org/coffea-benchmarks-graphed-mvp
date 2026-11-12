@@ -37,7 +37,7 @@ def main() -> None:
     for nworkers in args.workers:
         executor = None
         if nworkers > 1:
-            executor = ProcessPoolExecutor(max_workers=nworkers, persistent=True)
+            executor = ProcessPoolExecutor(workers=nworkers, persistent=True)
         try:
             for chunksize in args.chunksizes:
                 for query in args.queries:

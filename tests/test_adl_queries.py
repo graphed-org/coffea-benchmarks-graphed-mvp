@@ -48,7 +48,7 @@ def test_query_parallel_matches_the_reference_approximately(qname):
     pytest.importorskip("graphed_executors.local")
     from graphed_executors.local import ProcessPoolExecutor
 
-    out = adl.run_query(qname, WHERE, steps_per_file=8, executor=ProcessPoolExecutor(max_workers=2))
+    out = adl.run_query(qname, WHERE, steps_per_file=8, executor=ProcessPoolExecutor(workers=2))
     for label, h in out.items():
         got = np.asarray(h.values(flow=True))
         want = np.asarray(REF[qname][label])
@@ -69,7 +69,7 @@ def test_process_pool_aggregation_matches_the_sequential_run():
     from graphed_executors.local import ProcessPoolExecutor
 
     sequential = adl.run_query("q6", WHERE, steps_per_file=3)
-    pooled = adl.run_query("q6", WHERE, steps_per_file=3, executor=ProcessPoolExecutor(max_workers=2))
+    pooled = adl.run_query("q6", WHERE, steps_per_file=3, executor=ProcessPoolExecutor(workers=2))
     for label, h in pooled.items():
         assert np.array_equal(
             np.asarray(h.values(flow=True)), np.asarray(sequential[label].values(flow=True))

@@ -117,7 +117,7 @@ def test_rerun_of_the_preserved_analysis_optimizes_retargets_and_parallelizes(tm
     retarget = tmp_path / "Run2012B_SingleMu_50k_retarget.root"
     shutil.copy(SKIM, retarget)
     rerun, _ = preservation.rerun_preserved(
-        bundle, [str(retarget)], executor=ProcessPoolExecutor(max_workers=2)
+        bundle, [str(retarget)], executor=ProcessPoolExecutor(workers=2)
     )
     assert np.array_equal(
         np.asarray(rerun.values(flow=True)), np.asarray(reproduce(bundle).values(flow=True))
